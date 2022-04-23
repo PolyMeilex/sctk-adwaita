@@ -58,7 +58,7 @@ impl Default for ColorTheme {
         Self {
             active: ColorMap {
                 headerbar: Color::from_rgba8(235, 235, 235, 255),
-                button_idle: Color::from_rgba8(216, 216, 216, 0),
+                button_idle: Color::from_rgba8(216, 216, 216, 255),
                 button_hover: Color::from_rgba8(207, 207, 207, 255),
                 button_icon: Color::from_rgba8(42, 42, 42, 255),
             },
