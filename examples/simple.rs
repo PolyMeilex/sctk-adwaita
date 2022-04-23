@@ -64,12 +64,11 @@ fn main() {
                 window.refresh();
                 window.surface().commit();
             }
-            Some(WEvent::Configure { new_size, states }) => {
+            Some(WEvent::Configure { new_size, .. }) => {
                 if let Some((w, h)) = new_size {
                     window.resize(w, h);
                     dimensions = (w, h)
                 }
-                println!("Window states: {:?}", states);
                 window.refresh();
                 redraw(&mut pool, window.surface(), dimensions).expect("Failed to draw");
             }

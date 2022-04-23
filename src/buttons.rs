@@ -1,7 +1,7 @@
 use crate::Location;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ButtonType {
+pub enum ButtonKind {
     Close,
     Maximize,
     Minimize,
@@ -17,14 +17,6 @@ pub struct Button {
 impl Button {
     pub fn radius(&self) -> f32 {
         self.size / 2.0
-    }
-
-    pub fn x(&self) -> f32 {
-        self.x
-    }
-
-    pub fn y(&self) -> f32 {
-        self.y
     }
 
     pub fn center_x(&self) -> f32 {
@@ -106,11 +98,11 @@ impl Buttons {
         let x = x as f32 * self.scale as f32;
         let y = y as f32 * self.scale as f32;
         if self.close.contains(x, y) {
-            Location::Button(ButtonType::Close)
+            Location::Button(ButtonKind::Close)
         } else if self.maximize.contains(x, y) {
-            Location::Button(ButtonType::Maximize)
+            Location::Button(ButtonKind::Maximize)
         } else if self.minimize.contains(x, y) {
-            Location::Button(ButtonType::Minimize)
+            Location::Button(ButtonKind::Minimize)
         } else {
             Location::Head
         }

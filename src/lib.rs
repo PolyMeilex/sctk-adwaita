@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use parts::{DecorationPartKind, Parts};
+use smithay_client_toolkit::reexports::client::protocol::wl_seat::WlSeat;
 use smithay_client_toolkit::reexports::{client, protocols};
 
 use client::protocol::{
@@ -20,17 +22,14 @@ mod theme;
 use theme::{ColorTheme, BORDER_COLOR, BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
-use buttons::{ButtonType, Buttons};
+use buttons::{ButtonKind, Buttons};
+
+mod parts;
+mod surface;
 
 /*
  * Utilities
  */
-
-const HEAD: usize = 0;
-const TOP: usize = 1;
-const BOTTOM: usize = 2;
-const LEFT: usize = 3;
-const RIGHT: usize = 4;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Location {
@@ -44,13 +43,13 @@ pub enum Location {
     BottomLeft,
     Left,
     TopLeft,
-    Button(ButtonType),
+    Button(ButtonKind),
 }
 
 #[derive(Debug)]
-struct Part {
-    surface: wl_surface::WlSurface,
-    subsurface: wl_subsurface::WlSubsurface,
+pub struct Part {
+    pub surface: wl_surface::WlSurface,
+    pub subsurface: wl_subsurface::WlSubsurface,
 }
 
 impl Part {
@@ -92,6 +91,10 @@ impl Part {
             subsurface: subsurface.detach(),
         }
     }
+
+    fn scale(&self) -> u32 {
+        surface::get_surface_scale_factor(&self.surface) as u32
+    }
 }
 
 impl Drop for Part {
@@ -103,44 +106,117 @@ impl Drop for Part {
 
 struct PointerUserData {
     location: Location,
+    current_surface: DecorationPartKind,
+
     position: (f64, f64),
-    seat: wl_seat::WlSeat,
+    seat: WlSeat,
+}
+
+impl PointerUserData {
+    fn new(seat: WlSeat) -> Self {
+        Self {
+            location: Location::None,
+            current_surface: DecorationPartKind::None,
+            position: (0.0, 0.0),
+            seat,
+        }
+    }
+
+    fn event(
+        &mut self,
+        event: wl_pointer::Event,
+        inner: &mut Inner,
+        buttons: &Buttons,
+        pointer: &ThemedPointer,
+        ddata: DispatchData<'_>,
+    ) {
+        use wl_pointer::Event;
+        match event {
+            Event::Enter {
+                serial,
+                surface,
+                surface_x,
+                surface_y,
+            } => {
+                self.location = precise_location(
+                    buttons,
+                    inner.parts.find_surface(&surface),
+                    inner.size.0,
+                    surface_x,
+                    surface_y,
+                );
+                self.current_surface = inner.parts.find_decoration_part(&surface);
+                self.position = (surface_x, surface_y);
+                change_pointer(&pointer, &inner, self.location, Some(serial))
+            }
+            Event::Leave { serial, .. } => {
+                self.current_surface = DecorationPartKind::None;
+
+                self.location = Location::None;
+                change_pointer(&pointer, &inner, self.location, Some(serial));
+                (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
+            }
+            Event::Motion {
+                surface_x,
+                surface_y,
+                ..
+            } => {
+                self.position = (surface_x, surface_y);
+                let newpos =
+                    precise_location(buttons, self.location, inner.size.0, surface_x, surface_y);
+                if newpos != self.location {
+                    match (newpos, self.location) {
+                        (Location::Button(_), _) | (_, Location::Button(_)) => {
+                            // pointer movement involves a button, request refresh
+                            (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
+                        }
+                        _ => (),
+                    }
+                    // we changed of part of the decoration, pointer image
+                    // may need to be changed
+                    self.location = newpos;
+                    change_pointer(&pointer, &inner, self.location, None)
+                }
+            }
+            Event::Button {
+                serial,
+                button,
+                state,
+                ..
+            } => {
+                if state == wl_pointer::ButtonState::Pressed {
+                    let request = match button {
+                        // Left mouse button.
+                        0x110 => {
+                            request_for_location_on_lmb(&self, inner.maximized, inner.resizable)
+                        }
+                        // Right mouse button.
+                        0x111 => request_for_location_on_rmb(&self),
+                        _ => None,
+                    };
+
+                    if let Some(request) = request {
+                        (&mut inner.implem)(request, serial, ddata);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /*
  * The core frame
  */
 
-struct Inner {
-    parts: Vec<Part>,
+pub struct Inner {
+    parts: Parts,
     size: (u32, u32),
     resizable: bool,
     theme_over_surface: bool,
     implem: Box<dyn FnMut(FrameRequest, u32, DispatchData)>,
     maximized: bool,
     fullscreened: bool,
-}
-
-impl Inner {
-    fn find_surface(&self, surface: &wl_surface::WlSurface) -> Location {
-        if self.parts.is_empty() {
-            return Location::None;
-        }
-
-        if surface.as_ref().equals(self.parts[HEAD].surface.as_ref()) {
-            Location::Head
-        } else if surface.as_ref().equals(self.parts[TOP].surface.as_ref()) {
-            Location::Top
-        } else if surface.as_ref().equals(self.parts[BOTTOM].surface.as_ref()) {
-            Location::Bottom
-        } else if surface.as_ref().equals(self.parts[LEFT].surface.as_ref()) {
-            Location::Left
-        } else if surface.as_ref().equals(self.parts[RIGHT].surface.as_ref()) {
-            Location::Right
-        } else {
-            Location::None
-        }
-    }
 }
 
 impl fmt::Debug for Inner {
@@ -235,7 +311,7 @@ impl Frame for FallbackFrame {
         };
 
         let inner = Rc::new(RefCell::new(Inner {
-            parts: vec![],
+            parts: Parts::default(),
             size: (1, 1),
             resizable: true,
             implem: implementation,
@@ -263,7 +339,6 @@ impl Frame for FallbackFrame {
     }
 
     fn new_seat(&mut self, seat: &Attached<wl_seat::WlSeat>) {
-        use self::wl_pointer::Event;
         let inner = self.inner.clone();
 
         let buttons = self.buttons.clone();
@@ -273,90 +348,13 @@ impl Frame for FallbackFrame {
                 let data: &RefCell<PointerUserData> = pointer.as_ref().user_data().get().unwrap();
                 let mut data = data.borrow_mut();
                 let mut inner = inner.borrow_mut();
-                match event {
-                    Event::Enter {
-                        serial,
-                        surface,
-                        surface_x,
-                        surface_y,
-                    } => {
-                        data.location = precise_location(
-                            &buttons.borrow(),
-                            inner.find_surface(&surface),
-                            inner.size.0,
-                            surface_x,
-                            surface_y,
-                        );
-                        data.position = (surface_x, surface_y);
-                        change_pointer(&pointer, &inner, data.location, Some(serial))
-                    }
-                    Event::Leave { serial, .. } => {
-                        data.location = Location::None;
-                        change_pointer(&pointer, &inner, data.location, Some(serial));
-                        (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
-                    }
-                    Event::Motion {
-                        surface_x,
-                        surface_y,
-                        ..
-                    } => {
-                        data.position = (surface_x, surface_y);
-                        let newpos = precise_location(
-                            &buttons.borrow(),
-                            data.location,
-                            inner.size.0,
-                            surface_x,
-                            surface_y,
-                        );
-                        if newpos != data.location {
-                            match (newpos, data.location) {
-                                (Location::Button(_), _) | (_, Location::Button(_)) => {
-                                    // pointer movement involves a button, request refresh
-                                    (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
-                                }
-                                _ => (),
-                            }
-                            // we changed of part of the decoration, pointer image
-                            // may need to be changed
-                            data.location = newpos;
-                            change_pointer(&pointer, &inner, data.location, None)
-                        }
-                    }
-                    Event::Button {
-                        serial,
-                        button,
-                        state,
-                        ..
-                    } => {
-                        if state == wl_pointer::ButtonState::Pressed {
-                            let request = match button {
-                                // Left mouse button.
-                                0x110 => request_for_location_on_lmb(
-                                    &data,
-                                    inner.maximized,
-                                    inner.resizable,
-                                ),
-                                // Right mouse button.
-                                0x111 => request_for_location_on_rmb(&data),
-                                _ => None,
-                            };
-
-                            if let Some(request) = request {
-                                (&mut inner.implem)(request, serial, ddata);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+                data.event(event, &mut inner, &buttons.borrow(), &pointer, ddata);
             },
         );
-        pointer.as_ref().user_data().set(|| {
-            RefCell::new(PointerUserData {
-                location: Location::None,
-                position: (0.0, 0.0),
-                seat: seat.detach(),
-            })
-        });
+        pointer
+            .as_ref()
+            .user_data()
+            .set(|| RefCell::new(PointerUserData::new(seat.detach())));
         self.pointers.push(pointer);
     }
 
@@ -407,42 +405,14 @@ impl Frame for FallbackFrame {
         self.hidden = hidden;
         let mut inner = self.inner.borrow_mut();
         if !self.hidden {
-            if inner.parts.is_empty() {
-                inner.parts = vec![
-                    Part::new(
-                        &self.base_surface,
-                        &self.compositor,
-                        &self.subcompositor,
-                        Some(Rc::clone(&self.inner)),
-                    ),
-                    Part::new(
-                        &self.base_surface,
-                        &self.compositor,
-                        &self.subcompositor,
-                        None,
-                    ),
-                    Part::new(
-                        &self.base_surface,
-                        &self.compositor,
-                        &self.subcompositor,
-                        None,
-                    ),
-                    Part::new(
-                        &self.base_surface,
-                        &self.compositor,
-                        &self.subcompositor,
-                        None,
-                    ),
-                    Part::new(
-                        &self.base_surface,
-                        &self.compositor,
-                        &self.subcompositor,
-                        None,
-                    ),
-                ];
-            }
+            inner.parts.add_decorations(
+                &self.base_surface,
+                &self.compositor,
+                &self.subcompositor,
+                self.inner.clone(),
+            );
         } else {
-            inner.parts.clear();
+            inner.parts.remove_decorations();
         }
     }
 
@@ -460,11 +430,7 @@ impl Frame for FallbackFrame {
 
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.hidden || inner.fullscreened {
-            // Don't draw the borders.
-            for p in inner.parts.iter() {
-                p.surface.attach(None, 0, 0);
-                p.surface.commit();
-            }
+            inner.parts.hide_decorations();
             return;
         }
 
@@ -472,262 +438,266 @@ impl Frame for FallbackFrame {
         // they will be created once `self.hidden` will become `false`.
         let parts = &inner.parts;
 
-        let scales: Vec<u32> = parts
-            .iter()
-            .map(|part| surface::get_surface_scale_factor(&part.surface) as u32)
-            .collect();
-
         let (width, height) = inner.size;
 
-        // Use header scale for all the thing.
-        let header_scale = scales[HEAD];
-        self.buttons.borrow_mut().update_scale(header_scale);
+        if let Some(decoration) = parts.decoration() {
+            // Use header scale for all the thing.
+            let header_scale = decoration.header.scale();
+            self.buttons.borrow_mut().update_scale(header_scale);
 
-        let (header_width, header_height) = self.buttons.borrow().scaled_size();
+            let top_scale = decoration.header.scale();
+            let left_scale = decoration.left.scale();
+            let right_scale = decoration.right.scale();
+            let bottom_scale = decoration.bottom.scale();
 
-        {
-            // Create the buffers and draw
+            let (header_width, header_height) = self.buttons.borrow().scaled_size();
 
-            // -> head-subsurface
-            if let Ok((canvas, buffer)) = self.pool.buffer(
-                header_width as i32,
-                header_height as i32,
-                4 * header_width as i32,
-                wl_shm::Format::Argb8888,
-            ) {
-                draw_buttons(
-                    canvas,
-                    width,
-                    header_scale,
-                    inner.resizable,
-                    self.active,
-                    &self.colors,
-                    &mut self.buttons.borrow_mut(),
-                    &self
-                        .pointers
-                        .iter()
-                        .flat_map(|p| {
-                            if p.as_ref().is_alive() {
-                                let data: &RefCell<PointerUserData> =
-                                    p.as_ref().user_data().get().unwrap();
-                                Some(data.borrow().location)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<Location>>(),
-                );
+            {
+                // Create the buffers and draw
 
-                parts[HEAD]
-                    .subsurface
-                    .set_position(0, -(HEADER_SIZE as i32));
-                parts[HEAD].surface.attach(Some(&buffer), 0, 0);
-                if self.surface_version >= 4 {
-                    parts[HEAD].surface.damage_buffer(
-                        0,
-                        0,
-                        header_width as i32,
-                        header_height as i32,
+                // -> head-subsurface
+                if let Ok((canvas, buffer)) = self.pool.buffer(
+                    header_width as i32,
+                    header_height as i32,
+                    4 * header_width as i32,
+                    wl_shm::Format::Argb8888,
+                ) {
+                    draw_buttons(
+                        canvas,
+                        width,
+                        header_scale,
+                        inner.resizable,
+                        self.active,
+                        &self.colors,
+                        &mut self.buttons.borrow_mut(),
+                        &self
+                            .pointers
+                            .iter()
+                            .flat_map(|p| {
+                                if p.as_ref().is_alive() {
+                                    let data: &RefCell<PointerUserData> =
+                                        p.as_ref().user_data().get().unwrap();
+                                    Some(data.borrow().location)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<Location>>(),
                     );
-                } else {
-                    // surface is old and does not support damage_buffer, so we damage
-                    // in surface coordinates and hope it is not rescaled
-                    parts[HEAD]
-                        .surface
-                        .damage(0, 0, width as i32, HEADER_SIZE as i32);
-                }
-                parts[HEAD].surface.commit();
-            }
 
-            if inner.maximized {
-                // Don't draw the borders.
-                for p in inner.parts.iter().skip(1) {
-                    p.surface.attach(None, 0, 0);
-                    p.surface.commit();
-                }
-                return;
-            }
-
-            // -> top-subsurface
-            if let Ok((canvas, buffer)) = self.pool.buffer(
-                ((width + 2 * BORDER_SIZE) * scales[TOP]) as i32,
-                (BORDER_SIZE * scales[TOP]) as i32,
-                (4 * scales[TOP] * (width + 2 * BORDER_SIZE)) as i32,
-                wl_shm::Format::Argb8888,
-            ) {
-                for pixel in canvas.chunks_exact_mut(4) {
-                    pixel[0] = 0;
-                    pixel[1] = 0;
-                    pixel[2] = 0;
-                    pixel[3] = 0;
-                }
-
-                parts[TOP].subsurface.set_position(
-                    -(BORDER_SIZE as i32),
-                    -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
-                );
-                parts[TOP].surface.attach(Some(&buffer), 0, 0);
-                if self.surface_version >= 4 {
-                    parts[TOP].surface.damage_buffer(
-                        0,
-                        0,
-                        ((width + 2 * BORDER_SIZE) * scales[TOP]) as i32,
-                        (BORDER_SIZE * scales[TOP]) as i32,
-                    );
-                } else {
-                    // surface is old and does not support damage_buffer, so we damage
-                    // in surface coordinates and hope it is not rescaled
-                    parts[TOP].surface.damage(
-                        0,
-                        0,
-                        (width + 2 * BORDER_SIZE) as i32,
-                        BORDER_SIZE as i32,
-                    );
-                }
-                parts[TOP].surface.commit();
-            }
-
-            let w = ((width + 2 * BORDER_SIZE) * scales[BOTTOM]) as i32;
-            // -> bottom-subsurface
-            if let Ok((canvas, buffer)) = self.pool.buffer(
-                w,
-                (BORDER_SIZE * scales[BOTTOM]) as i32,
-                (4 * scales[BOTTOM] * (width + 2 * BORDER_SIZE)) as i32,
-                wl_shm::Format::Argb8888,
-            ) {
-                for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                    let vid = id as i32 % w;
-                    let hid = id as i32 / w;
-                    let color = if vid > BORDER_SIZE as i32 - 2
-                        && vid < w - (BORDER_SIZE as i32 - 1)
-                        && hid < 1
-                    {
-                        BORDER_COLOR
+                    decoration
+                        .header
+                        .subsurface
+                        .set_position(0, -(HEADER_SIZE as i32));
+                    decoration.header.surface.attach(Some(&buffer), 0, 0);
+                    if self.surface_version >= 4 {
+                        decoration.header.surface.damage_buffer(
+                            0,
+                            0,
+                            header_width as i32,
+                            header_height as i32,
+                        );
                     } else {
-                        [0, 0, 0, 0]
-                    };
-
-                    pixel[0] = color[0];
-                    pixel[1] = color[1];
-                    pixel[2] = color[2];
-                    pixel[3] = color[3];
+                        // surface is old and does not support damage_buffer, so we damage
+                        // in surface coordinates and hope it is not rescaled
+                        decoration
+                            .header
+                            .surface
+                            .damage(0, 0, width as i32, HEADER_SIZE as i32);
+                    }
+                    decoration.header.surface.commit();
                 }
 
-                parts[BOTTOM]
-                    .subsurface
-                    .set_position(-(BORDER_SIZE as i32), height as i32);
-                parts[BOTTOM].surface.attach(Some(&buffer), 0, 0);
-                if self.surface_version >= 4 {
-                    parts[BOTTOM].surface.damage_buffer(
-                        0,
-                        0,
-                        ((width + 2 * BORDER_SIZE) * scales[BOTTOM]) as i32,
-                        (BORDER_SIZE * scales[BOTTOM]) as i32,
-                    );
-                } else {
-                    // surface is old and does not support damage_buffer, so we damage
-                    // in surface coordinates and hope it is not rescaled
-                    parts[BOTTOM].surface.damage(
-                        0,
-                        0,
-                        (width + 2 * BORDER_SIZE) as i32,
-                        BORDER_SIZE as i32,
-                    );
+                if inner.maximized {
+                    // Don't draw the borders.
+                    decoration.hide_borders();
+                    return;
                 }
-                parts[BOTTOM].surface.commit();
-            }
 
-            let w = (BORDER_SIZE * scales[LEFT]) as i32;
-            let h = ((height + HEADER_SIZE) * scales[LEFT]) as i32;
-            // -> left-subsurface
-            if let Ok((canvas, buffer)) = self.pool.buffer(
-                w,
-                h,
-                4 * (BORDER_SIZE * scales[LEFT]) as i32,
-                wl_shm::Format::Argb8888,
-            ) {
-                for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                    let vid = id as i32 % w;
-                    let hid = id as i32 / w;
-                    let color = if vid > w - 2 && hid > BORDER_SIZE as i32 {
-                        BORDER_COLOR
+                // -> top-subsurface
+                if let Ok((canvas, buffer)) = self.pool.buffer(
+                    ((width + 2 * BORDER_SIZE) * top_scale) as i32,
+                    (BORDER_SIZE * top_scale) as i32,
+                    (4 * top_scale * (width + 2 * BORDER_SIZE)) as i32,
+                    wl_shm::Format::Argb8888,
+                ) {
+                    for pixel in canvas.chunks_exact_mut(4) {
+                        pixel[0] = 0;
+                        pixel[1] = 0;
+                        pixel[2] = 0;
+                        pixel[3] = 0;
+                    }
+
+                    decoration.top.subsurface.set_position(
+                        -(BORDER_SIZE as i32),
+                        -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                    );
+                    decoration.top.surface.attach(Some(&buffer), 0, 0);
+                    if self.surface_version >= 4 {
+                        decoration.top.surface.damage_buffer(
+                            0,
+                            0,
+                            ((width + 2 * BORDER_SIZE) * top_scale) as i32,
+                            (BORDER_SIZE * top_scale) as i32,
+                        );
                     } else {
-                        [0, 0, 0, 0]
-                    };
-                    pixel[0] = color[0];
-                    pixel[1] = color[1];
-                    pixel[2] = color[2];
-                    pixel[3] = color[3];
+                        // surface is old and does not support damage_buffer, so we damage
+                        // in surface coordinates and hope it is not rescaled
+                        decoration.top.surface.damage(
+                            0,
+                            0,
+                            (width + 2 * BORDER_SIZE) as i32,
+                            BORDER_SIZE as i32,
+                        );
+                    }
+                    decoration.top.surface.commit();
                 }
 
-                parts[LEFT]
-                    .subsurface
-                    .set_position(-(BORDER_SIZE as i32), -(HEADER_SIZE as i32));
-                parts[LEFT].surface.attach(Some(&buffer), 0, 0);
-                if self.surface_version >= 4 {
-                    parts[LEFT].surface.damage_buffer(
-                        0,
-                        0,
-                        (BORDER_SIZE * scales[LEFT]) as i32,
-                        ((height + HEADER_SIZE) * scales[LEFT]) as i32,
-                    );
-                } else {
-                    // surface is old and does not support damage_buffer, so we damage
-                    // in surface coordinates and hope it is not rescaled
-                    parts[LEFT].surface.damage(
-                        0,
-                        0,
-                        BORDER_SIZE as i32,
-                        (height + HEADER_SIZE) as i32,
-                    );
-                }
-                parts[LEFT].surface.commit();
-            }
+                let w = ((width + 2 * BORDER_SIZE) * bottom_scale) as i32;
+                // -> bottom-subsurface
+                if let Ok((canvas, buffer)) = self.pool.buffer(
+                    w,
+                    (BORDER_SIZE * bottom_scale) as i32,
+                    (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
+                    wl_shm::Format::Argb8888,
+                ) {
+                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
+                        let vid = id as i32 % w;
+                        let hid = id as i32 / w;
+                        let color = if vid > BORDER_SIZE as i32 - 2
+                            && vid < w - (BORDER_SIZE as i32 - 1)
+                            && hid < 1
+                        {
+                            BORDER_COLOR
+                        } else {
+                            [0, 0, 0, 0]
+                        };
 
-            let w = (BORDER_SIZE * scales[RIGHT]) as i32;
-            // -> right-subsurface
-            if let Ok((canvas, buffer)) = self.pool.buffer(
-                w,
-                ((height + HEADER_SIZE) * scales[RIGHT]) as i32,
-                4 * (BORDER_SIZE * scales[RIGHT]) as i32,
-                wl_shm::Format::Argb8888,
-            ) {
-                for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                    let wid = id as i32 % w;
-                    let hid = id as i32 / w;
-                    let color = if wid < 1 && hid > BORDER_SIZE as i32 {
-                        BORDER_COLOR
+                        pixel[0] = color[0];
+                        pixel[1] = color[1];
+                        pixel[2] = color[2];
+                        pixel[3] = color[3];
+                    }
+
+                    decoration
+                        .bottom
+                        .subsurface
+                        .set_position(-(BORDER_SIZE as i32), height as i32);
+                    decoration.bottom.surface.attach(Some(&buffer), 0, 0);
+                    if self.surface_version >= 4 {
+                        decoration.bottom.surface.damage_buffer(
+                            0,
+                            0,
+                            ((width + 2 * BORDER_SIZE) * bottom_scale) as i32,
+                            (BORDER_SIZE * bottom_scale) as i32,
+                        );
                     } else {
-                        [0, 0, 0, 0]
-                    };
-                    pixel[0] = color[0];
-                    pixel[1] = color[1];
-                    pixel[2] = color[2];
-                    pixel[3] = color[3];
+                        // surface is old and does not support damage_buffer, so we damage
+                        // in surface coordinates and hope it is not rescaled
+                        decoration.bottom.surface.damage(
+                            0,
+                            0,
+                            (width + 2 * BORDER_SIZE) as i32,
+                            BORDER_SIZE as i32,
+                        );
+                    }
+                    decoration.bottom.surface.commit();
                 }
 
-                parts[RIGHT]
-                    .subsurface
-                    .set_position(width as i32, -(HEADER_SIZE as i32));
-                parts[RIGHT].surface.attach(Some(&buffer), 0, 0);
-                if self.surface_version >= 4 {
-                    parts[RIGHT].surface.damage_buffer(
-                        0,
-                        0,
-                        (BORDER_SIZE * scales[RIGHT]) as i32,
-                        ((height + HEADER_SIZE) * scales[RIGHT]) as i32,
-                    );
-                } else {
-                    // surface is old and does not support damage_buffer, so we damage
-                    // in surface coordinates and hope it is not rescaled
-                    parts[RIGHT].surface.damage(
-                        0,
-                        0,
-                        BORDER_SIZE as i32,
-                        (height + HEADER_SIZE) as i32,
-                    );
+                let w = (BORDER_SIZE * left_scale) as i32;
+                let h = ((height + HEADER_SIZE) * left_scale) as i32;
+                // -> left-subsurface
+                if let Ok((canvas, buffer)) = self.pool.buffer(
+                    w,
+                    h,
+                    4 * (BORDER_SIZE * left_scale) as i32,
+                    wl_shm::Format::Argb8888,
+                ) {
+                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
+                        let vid = id as i32 % w;
+                        let hid = id as i32 / w;
+                        let color = if vid > w - 2 && hid > BORDER_SIZE as i32 {
+                            BORDER_COLOR
+                        } else {
+                            [0, 0, 0, 0]
+                        };
+                        pixel[0] = color[0];
+                        pixel[1] = color[1];
+                        pixel[2] = color[2];
+                        pixel[3] = color[3];
+                    }
+
+                    decoration
+                        .left
+                        .subsurface
+                        .set_position(-(BORDER_SIZE as i32), -(HEADER_SIZE as i32));
+                    decoration.left.surface.attach(Some(&buffer), 0, 0);
+                    if self.surface_version >= 4 {
+                        decoration.left.surface.damage_buffer(
+                            0,
+                            0,
+                            (BORDER_SIZE * left_scale) as i32,
+                            ((height + HEADER_SIZE) * left_scale) as i32,
+                        );
+                    } else {
+                        // surface is old and does not support damage_buffer, so we damage
+                        // in surface coordinates and hope it is not rescaled
+                        decoration.left.surface.damage(
+                            0,
+                            0,
+                            BORDER_SIZE as i32,
+                            (height + HEADER_SIZE) as i32,
+                        );
+                    }
+                    decoration.left.surface.commit();
                 }
-                parts[RIGHT].surface.commit();
+
+                let w = (BORDER_SIZE * right_scale) as i32;
+                // -> right-subsurface
+                if let Ok((canvas, buffer)) = self.pool.buffer(
+                    w,
+                    ((height + HEADER_SIZE) * right_scale) as i32,
+                    4 * (BORDER_SIZE * right_scale) as i32,
+                    wl_shm::Format::Argb8888,
+                ) {
+                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
+                        let wid = id as i32 % w;
+                        let hid = id as i32 / w;
+                        let color = if wid < 1 && hid > BORDER_SIZE as i32 {
+                            BORDER_COLOR
+                        } else {
+                            [0, 0, 0, 0]
+                        };
+                        pixel[0] = color[0];
+                        pixel[1] = color[1];
+                        pixel[2] = color[2];
+                        pixel[3] = color[3];
+                    }
+
+                    decoration
+                        .right
+                        .subsurface
+                        .set_position(width as i32, -(HEADER_SIZE as i32));
+                    decoration.right.surface.attach(Some(&buffer), 0, 0);
+                    if self.surface_version >= 4 {
+                        decoration.right.surface.damage_buffer(
+                            0,
+                            0,
+                            (BORDER_SIZE * right_scale) as i32,
+                            ((height + HEADER_SIZE) * right_scale) as i32,
+                        );
+                    } else {
+                        // surface is old and does not support damage_buffer, so we damage
+                        // in surface coordinates and hope it is not rescaled
+                        decoration.right.surface.damage(
+                            0,
+                            0,
+                            BORDER_SIZE as i32,
+                            (height + HEADER_SIZE) as i32,
+                        );
+                    }
+                    decoration.right.surface.commit();
+                }
             }
         }
     }
@@ -836,15 +806,15 @@ fn request_for_location_on_lmb(
             ResizeEdge::TopRight,
         )),
         Location::Head => Some(FrameRequest::Move(pointer_data.seat.clone())),
-        Location::Button(ButtonType::Close) => Some(FrameRequest::Close),
-        Location::Button(ButtonType::Maximize) => {
+        Location::Button(ButtonKind::Close) => Some(FrameRequest::Close),
+        Location::Button(ButtonKind::Maximize) => {
             if maximized {
                 Some(FrameRequest::UnMaximize)
             } else {
                 Some(FrameRequest::Maximize)
             }
         }
-        Location::Button(ButtonType::Minimize) => Some(FrameRequest::Minimize),
+        Location::Button(ButtonKind::Minimize) => Some(FrameRequest::Minimize),
         _ => None,
     }
 }
@@ -963,7 +933,7 @@ fn draw_buttons(
         // Draw the close button
         let btn_state = if mouses
             .iter()
-            .any(|&l| l == Location::Button(ButtonType::Close))
+            .any(|&l| l == Location::Button(ButtonKind::Close))
         {
             ButtonState::Hovered
         } else {
@@ -1046,7 +1016,7 @@ fn draw_buttons(
             ButtonState::Disabled
         } else if mouses
             .iter()
-            .any(|&l| l == Location::Button(ButtonType::Maximize))
+            .any(|&l| l == Location::Button(ButtonKind::Maximize))
         {
             ButtonState::Hovered
         } else {
@@ -1106,7 +1076,7 @@ fn draw_buttons(
     {
         let btn_state = if mouses
             .iter()
-            .any(|&l| l == Location::Button(ButtonType::Minimize))
+            .any(|&l| l == Location::Button(ButtonKind::Minimize))
         {
             ButtonState::Hovered
         } else {
@@ -1155,162 +1125,5 @@ fn draw_buttons(
 
     for (id, pixel) in canvas.iter_mut().enumerate() {
         *pixel = buff[id];
-    }
-}
-
-mod surface {
-    use std::{cell::RefCell, rc::Rc, sync::Mutex};
-
-    use super::client;
-    use smithay_client_toolkit as sctk;
-
-    use client::{
-        protocol::{wl_output, wl_surface},
-        Attached, DispatchData, Main,
-    };
-    use sctk::output::{add_output_listener, with_output_info, OutputListener};
-
-    pub(crate) struct SurfaceUserData {
-        scale_factor: i32,
-        outputs: Vec<(wl_output::WlOutput, i32, OutputListener)>,
-    }
-
-    impl SurfaceUserData {
-        fn new() -> Self {
-            SurfaceUserData {
-                scale_factor: 1,
-                outputs: Vec::new(),
-            }
-        }
-
-        pub(crate) fn enter<F>(
-            &mut self,
-            output: wl_output::WlOutput,
-            surface: wl_surface::WlSurface,
-            callback: &Option<Rc<RefCell<F>>>,
-        ) where
-            F: FnMut(i32, wl_surface::WlSurface, DispatchData) + 'static,
-        {
-            let output_scale = with_output_info(&output, |info| info.scale_factor).unwrap_or(1);
-            let my_surface = surface.clone();
-            // Use a UserData to safely share the callback with the other thread
-            let my_callback = client::UserData::new();
-            if let Some(ref cb) = callback {
-                my_callback.set(|| cb.clone());
-            }
-            let listener = add_output_listener(&output, move |output, info, ddata| {
-                let mut user_data = my_surface
-                    .as_ref()
-                    .user_data()
-                    .get::<Mutex<SurfaceUserData>>()
-                    .unwrap()
-                    .lock()
-                    .unwrap();
-                // update the scale factor of the relevant output
-                for (ref o, ref mut factor, _) in user_data.outputs.iter_mut() {
-                    if o.as_ref().equals(output.as_ref()) {
-                        if info.obsolete {
-                            // an output that no longer exists is marked by a scale factor of -1
-                            *factor = -1;
-                        } else {
-                            *factor = info.scale_factor;
-                        }
-                        break;
-                    }
-                }
-                // recompute the scale factor with the new info
-                let callback = my_callback.get::<Rc<RefCell<F>>>().cloned();
-                let old_scale_factor = user_data.scale_factor;
-                let new_scale_factor = user_data.recompute_scale_factor();
-                drop(user_data);
-                if let Some(ref cb) = callback {
-                    if old_scale_factor != new_scale_factor {
-                        (&mut *cb.borrow_mut())(new_scale_factor, surface.clone(), ddata);
-                    }
-                }
-            });
-            self.outputs.push((output, output_scale, listener));
-        }
-
-        pub(crate) fn leave(&mut self, output: &wl_output::WlOutput) {
-            self.outputs
-                .retain(|(ref output2, _, _)| !output.as_ref().equals(output2.as_ref()));
-        }
-
-        fn recompute_scale_factor(&mut self) -> i32 {
-            let mut new_scale_factor = 1;
-            self.outputs.retain(|&(_, output_scale, _)| {
-                if output_scale > 0 {
-                    new_scale_factor = ::std::cmp::max(new_scale_factor, output_scale);
-                    true
-                } else {
-                    // cleanup obsolete output
-                    false
-                }
-            });
-            if self.outputs.is_empty() {
-                // don't update the scale factor if we are not displayed on any output
-                return self.scale_factor;
-            }
-            self.scale_factor = new_scale_factor;
-            new_scale_factor
-        }
-    }
-
-    pub fn setup_surface<F>(
-        surface: Main<wl_surface::WlSurface>,
-        callback: Option<F>,
-    ) -> Attached<wl_surface::WlSurface>
-    where
-        F: FnMut(i32, wl_surface::WlSurface, DispatchData) + 'static,
-    {
-        let callback = callback.map(|c| Rc::new(RefCell::new(c)));
-        surface.quick_assign(move |surface, event, ddata| {
-            let mut user_data = surface
-                .as_ref()
-                .user_data()
-                .get::<Mutex<SurfaceUserData>>()
-                .unwrap()
-                .lock()
-                .unwrap();
-            match event {
-                wl_surface::Event::Enter { output } => {
-                    // Passing the callback to be added to output listener
-                    user_data.enter(output, surface.detach(), &callback);
-                }
-                wl_surface::Event::Leave { output } => {
-                    user_data.leave(&output);
-                }
-                _ => unreachable!(),
-            };
-            let old_scale_factor = user_data.scale_factor;
-            let new_scale_factor = user_data.recompute_scale_factor();
-            drop(user_data);
-            if let Some(ref cb) = callback {
-                if old_scale_factor != new_scale_factor {
-                    (&mut *cb.borrow_mut())(new_scale_factor, surface.detach(), ddata);
-                }
-            }
-        });
-        surface
-            .as_ref()
-            .user_data()
-            .set_threadsafe(|| Mutex::new(SurfaceUserData::new()));
-        surface.into()
-    }
-
-    /// Returns the current suggested scale factor of a surface.
-    ///
-    /// Panics if the surface was not created using `Environment::create_surface` or
-    /// `Environment::create_surface_with_dpi_callback`.
-    pub fn get_surface_scale_factor(surface: &wl_surface::WlSurface) -> i32 {
-        surface
-            .as_ref()
-            .user_data()
-            .get::<Mutex<SurfaceUserData>>()
-            .expect("SCTK: Surface was not created by SCTK.")
-            .lock()
-            .unwrap()
-            .scale_factor
     }
 }
