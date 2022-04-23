@@ -1,15 +1,17 @@
 use std::{cell::RefCell, rc::Rc};
 
-use smithay_client_toolkit::reexports::client::{
-    protocol::{
-        wl_compositor::WlCompositor, wl_subcompositor::WlSubcompositor, wl_surface::WlSurface,
+use smithay_client_toolkit::{
+    reexports::client::{
+        protocol::{
+            wl_compositor::WlCompositor, wl_subcompositor::WlSubcompositor,
+            wl_subsurface::WlSubsurface, wl_surface::WlSurface,
+        },
+        Attached, DispatchData,
     },
-    Attached,
+    window::FrameRequest,
 };
 
-use crate::{Inner, Location};
-
-use super::Part;
+use crate::{surface, Inner, Location};
 
 pub enum DecorationPartKind {
     Header,
@@ -138,5 +140,59 @@ impl Parts {
         } else {
             Location::None
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Part {
+    pub surface: WlSurface,
+    pub subsurface: WlSubsurface,
+}
+
+impl Part {
+    fn new(
+        parent: &WlSurface,
+        compositor: &Attached<WlCompositor>,
+        subcompositor: &Attached<WlSubcompositor>,
+        inner: Option<Rc<RefCell<Inner>>>,
+    ) -> Part {
+        let surface = if let Some(inner) = inner {
+            surface::setup_surface(
+                compositor.create_surface(),
+                Some(move |dpi, surface: WlSurface, ddata: DispatchData| {
+                    surface.set_buffer_scale(dpi);
+                    surface.commit();
+                    (&mut inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
+                }),
+            )
+        } else {
+            surface::setup_surface(
+                compositor.create_surface(),
+                Some(move |dpi, surface: WlSurface, _ddata: DispatchData| {
+                    surface.set_buffer_scale(dpi);
+                    surface.commit();
+                }),
+            )
+        };
+
+        let surface = surface.detach();
+
+        let subsurface = subcompositor.get_subsurface(&surface, parent);
+
+        Part {
+            surface,
+            subsurface: subsurface.detach(),
+        }
+    }
+
+    pub fn scale(&self) -> u32 {
+        surface::get_surface_scale_factor(&self.surface) as u32
+    }
+}
+
+impl Drop for Part {
+    fn drop(&mut self) {
+        self.subsurface.destroy();
+        self.surface.destroy();
     }
 }

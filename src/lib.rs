@@ -2,21 +2,19 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use parts::{DecorationPartKind, Parts};
-use smithay_client_toolkit::reexports::client::protocol::wl_seat::WlSeat;
-use smithay_client_toolkit::reexports::{client, protocols};
+use parts::Parts;
+use pointer::PointerUserData;
+use smithay_client_toolkit::reexports::client;
 
-use client::protocol::{
-    wl_compositor, wl_pointer, wl_seat, wl_shm, wl_subcompositor, wl_subsurface, wl_surface,
-};
+use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
 use client::{Attached, DispatchData};
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 
-use log::error;
-
-use smithay_client_toolkit::seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer};
-use smithay_client_toolkit::shm::AutoMemPool;
-use smithay_client_toolkit::window::{ButtonState, Frame, FrameRequest, State, WindowState};
+use smithay_client_toolkit::{
+    seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer},
+    shm::AutoMemPool,
+    window::{ButtonState, Frame, FrameRequest, State, WindowState},
+};
 
 mod theme;
 use theme::{ColorTheme, BORDER_COLOR, BORDER_SIZE, HEADER_SIZE};
@@ -25,6 +23,7 @@ mod buttons;
 use buttons::{ButtonKind, Buttons};
 
 mod parts;
+mod pointer;
 mod surface;
 
 /*
@@ -44,165 +43,6 @@ pub enum Location {
     Left,
     TopLeft,
     Button(ButtonKind),
-}
-
-#[derive(Debug)]
-pub struct Part {
-    pub surface: wl_surface::WlSurface,
-    pub subsurface: wl_subsurface::WlSubsurface,
-}
-
-impl Part {
-    fn new(
-        parent: &wl_surface::WlSurface,
-        compositor: &Attached<wl_compositor::WlCompositor>,
-        subcompositor: &Attached<wl_subcompositor::WlSubcompositor>,
-        inner: Option<Rc<RefCell<Inner>>>,
-    ) -> Part {
-        let surface = if let Some(inner) = inner {
-            surface::setup_surface(
-                compositor.create_surface(),
-                Some(
-                    move |dpi, surface: wl_surface::WlSurface, ddata: DispatchData| {
-                        surface.set_buffer_scale(dpi);
-                        surface.commit();
-                        (&mut inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
-                    },
-                ),
-            )
-        } else {
-            surface::setup_surface(
-                compositor.create_surface(),
-                Some(
-                    move |dpi, surface: wl_surface::WlSurface, _ddata: DispatchData| {
-                        surface.set_buffer_scale(dpi);
-                        surface.commit();
-                    },
-                ),
-            )
-        };
-
-        let surface = surface.detach();
-
-        let subsurface = subcompositor.get_subsurface(&surface, parent);
-
-        Part {
-            surface,
-            subsurface: subsurface.detach(),
-        }
-    }
-
-    fn scale(&self) -> u32 {
-        surface::get_surface_scale_factor(&self.surface) as u32
-    }
-}
-
-impl Drop for Part {
-    fn drop(&mut self) {
-        self.subsurface.destroy();
-        self.surface.destroy();
-    }
-}
-
-struct PointerUserData {
-    location: Location,
-    current_surface: DecorationPartKind,
-
-    position: (f64, f64),
-    seat: WlSeat,
-}
-
-impl PointerUserData {
-    fn new(seat: WlSeat) -> Self {
-        Self {
-            location: Location::None,
-            current_surface: DecorationPartKind::None,
-            position: (0.0, 0.0),
-            seat,
-        }
-    }
-
-    fn event(
-        &mut self,
-        event: wl_pointer::Event,
-        inner: &mut Inner,
-        buttons: &Buttons,
-        pointer: &ThemedPointer,
-        ddata: DispatchData<'_>,
-    ) {
-        use wl_pointer::Event;
-        match event {
-            Event::Enter {
-                serial,
-                surface,
-                surface_x,
-                surface_y,
-            } => {
-                self.location = precise_location(
-                    buttons,
-                    inner.parts.find_surface(&surface),
-                    inner.size.0,
-                    surface_x,
-                    surface_y,
-                );
-                self.current_surface = inner.parts.find_decoration_part(&surface);
-                self.position = (surface_x, surface_y);
-                change_pointer(&pointer, &inner, self.location, Some(serial))
-            }
-            Event::Leave { serial, .. } => {
-                self.current_surface = DecorationPartKind::None;
-
-                self.location = Location::None;
-                change_pointer(&pointer, &inner, self.location, Some(serial));
-                (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
-            }
-            Event::Motion {
-                surface_x,
-                surface_y,
-                ..
-            } => {
-                self.position = (surface_x, surface_y);
-                let newpos =
-                    precise_location(buttons, self.location, inner.size.0, surface_x, surface_y);
-                if newpos != self.location {
-                    match (newpos, self.location) {
-                        (Location::Button(_), _) | (_, Location::Button(_)) => {
-                            // pointer movement involves a button, request refresh
-                            (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
-                        }
-                        _ => (),
-                    }
-                    // we changed of part of the decoration, pointer image
-                    // may need to be changed
-                    self.location = newpos;
-                    change_pointer(&pointer, &inner, self.location, None)
-                }
-            }
-            Event::Button {
-                serial,
-                button,
-                state,
-                ..
-            } => {
-                if state == wl_pointer::ButtonState::Pressed {
-                    let request = match button {
-                        // Left mouse button.
-                        0x110 => {
-                            request_for_location_on_lmb(&self, inner.maximized, inner.resizable)
-                        }
-                        // Right mouse button.
-                        0x111 => request_for_location_on_rmb(&self),
-                        _ => None,
-                    };
-
-                    if let Some(request) = request {
-                        (&mut inner.implem)(request, serial, ddata);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 /*
@@ -264,17 +104,9 @@ fn precise_location(buttons: &Buttons, old: Location, width: u32, x: f64, y: f64
     }
 }
 
-/// A simple set of decorations that can be used as a fallback
-///
-/// This class drawn some simple and minimalistic decorations around
-/// a window so that it remains possible to interact with the window
-/// even when server-side decorations are not available.
-///
-/// `FallbackFrame` is hiding its `ClientSide` decorations
-/// in a `Fullscreen` state and brings them back if those are
-/// visible when unsetting `Fullscreen` state.
+/// A simple set of decorations
 #[derive(Debug)]
-pub struct FallbackFrame {
+pub struct AdwaitaFrame {
     base_surface: wl_surface::WlSurface,
     compositor: Attached<wl_compositor::WlCompositor>,
     subcompositor: Attached<wl_subcompositor::WlSubcompositor>,
@@ -290,7 +122,7 @@ pub struct FallbackFrame {
     colors: ColorTheme,
 }
 
-impl Frame for FallbackFrame {
+impl Frame for AdwaitaFrame {
     type Error = ::std::io::Error;
     type Config = ();
     fn init(
@@ -300,7 +132,7 @@ impl Frame for FallbackFrame {
         shm: &Attached<wl_shm::WlShm>,
         theme_manager: Option<ThemeManager>,
         implementation: Box<dyn FnMut(FrameRequest, u32, DispatchData)>,
-    ) -> Result<FallbackFrame, ::std::io::Error> {
+    ) -> Result<AdwaitaFrame, ::std::io::Error> {
         let (themer, theme_over_surface) = if let Some(theme_manager) = theme_manager {
             (theme_manager, false)
         } else {
@@ -322,7 +154,7 @@ impl Frame for FallbackFrame {
 
         let pool = AutoMemPool::new(shm.clone())?;
 
-        Ok(FallbackFrame {
+        Ok(AdwaitaFrame {
             base_surface: base_surface.clone(),
             compositor: compositor.clone(),
             subcompositor: subcompositor.clone(),
@@ -731,103 +563,13 @@ impl Frame for FallbackFrame {
     fn set_title(&mut self, _title: String) {}
 }
 
-impl Drop for FallbackFrame {
+impl Drop for AdwaitaFrame {
     fn drop(&mut self) {
         for ptr in self.pointers.drain(..) {
             if ptr.as_ref().version() >= 3 {
                 ptr.release();
             }
         }
-    }
-}
-
-fn change_pointer(pointer: &ThemedPointer, inner: &Inner, location: Location, serial: Option<u32>) {
-    // Prevent theming of the surface if it was requested.
-    if !inner.theme_over_surface && location == Location::None {
-        return;
-    }
-
-    let name = match location {
-        // If we can't resize a frame we shouldn't show resize cursors.
-        _ if !inner.resizable => "left_ptr",
-        Location::Top => "top_side",
-        Location::TopRight => "top_right_corner",
-        Location::Right => "right_side",
-        Location::BottomRight => "bottom_right_corner",
-        Location::Bottom => "bottom_side",
-        Location::BottomLeft => "bottom_left_corner",
-        Location::Left => "left_side",
-        Location::TopLeft => "top_left_corner",
-        _ => "left_ptr",
-    };
-
-    if pointer.set_cursor(name, serial).is_err() {
-        error!("Failed to set cursor");
-    }
-}
-
-fn request_for_location_on_lmb(
-    pointer_data: &PointerUserData,
-    maximized: bool,
-    resizable: bool,
-) -> Option<FrameRequest> {
-    use protocols::xdg_shell::client::xdg_toplevel::ResizeEdge;
-    match pointer_data.location {
-        Location::Top if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Top,
-        )),
-        Location::TopLeft if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::TopLeft,
-        )),
-        Location::Left if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Left,
-        )),
-        Location::BottomLeft if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::BottomLeft,
-        )),
-        Location::Bottom if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Bottom,
-        )),
-        Location::BottomRight if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::BottomRight,
-        )),
-        Location::Right if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Right,
-        )),
-        Location::TopRight if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::TopRight,
-        )),
-        Location::Head => Some(FrameRequest::Move(pointer_data.seat.clone())),
-        Location::Button(ButtonKind::Close) => Some(FrameRequest::Close),
-        Location::Button(ButtonKind::Maximize) => {
-            if maximized {
-                Some(FrameRequest::UnMaximize)
-            } else {
-                Some(FrameRequest::Maximize)
-            }
-        }
-        Location::Button(ButtonKind::Minimize) => Some(FrameRequest::Minimize),
-        _ => None,
-    }
-}
-
-fn request_for_location_on_rmb(pointer_data: &PointerUserData) -> Option<FrameRequest> {
-    match pointer_data.location {
-        Location::Head | Location::Button(_) => Some(FrameRequest::ShowMenu(
-            pointer_data.seat.clone(),
-            pointer_data.position.0 as i32,
-            // We must offset it by header size for precise position.
-            pointer_data.position.1 as i32 - HEADER_SIZE as i32,
-        )),
-        _ => None,
     }
 }
 

@@ -18,7 +18,7 @@ fn main() {
     let surface = env.create_surface().detach();
 
     let mut window = env
-        .create_window::<sctk_adwaita::FallbackFrame, _>(
+        .create_window::<sctk_adwaita::AdwaitaFrame, _>(
             surface,
             None,
             dimensions,
