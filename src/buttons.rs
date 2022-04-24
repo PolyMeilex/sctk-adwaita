@@ -1,8 +1,8 @@
-use smithay_client_toolkit::window::{ButtonState, WindowState};
+use smithay_client_toolkit::window::ButtonState;
 use tiny_skia::{FillRule, PathBuilder, Pixmap, Rect, Stroke, Transform};
 
 use crate::{
-    theme::{ColorMap, ColorTheme, BORDER_SIZE},
+    theme::{ColorMap, BORDER_SIZE},
     Location,
 };
 
@@ -29,10 +29,6 @@ impl Button {
         self.x
     }
 
-    pub fn y(&self) -> f32 {
-        self.y
-    }
-
     pub fn center_x(&self) -> f32 {
         self.x + self.radius()
     }
@@ -50,7 +46,6 @@ impl Button {
     pub fn draw_minimize(
         &self,
         scale: f32,
-        state: WindowState,
         colors: &ColorMap,
         mouses: &[Location],
         pixmap: &mut Pixmap,
@@ -68,7 +63,7 @@ impl Button {
 
         let circle = PathBuilder::from_circle(x, y, radius).unwrap();
 
-        let button_bg = if state == WindowState::Active && btn_state == ButtonState::Hovered {
+        let button_bg = if btn_state == ButtonState::Hovered {
             colors.button_hover_paint()
         } else {
             colors.button_idle_paint()
@@ -98,7 +93,6 @@ impl Button {
     pub fn draw_maximize(
         &self,
         scale: f32,
-        state: WindowState,
         colors: &ColorMap,
         mouses: &[Location],
         maximizable: bool,
@@ -126,7 +120,7 @@ impl Button {
             pb.finish().unwrap()
         };
 
-        let button_bg = if state == WindowState::Active && btn_state == ButtonState::Hovered {
+        let button_bg = if btn_state == ButtonState::Hovered {
             colors.button_hover_paint()
         } else {
             colors.button_idle_paint()
@@ -165,7 +159,6 @@ impl Button {
     pub fn draw_close(
         &self,
         scale: f32,
-        state: WindowState,
         colors: &ColorMap,
         mouses: &[Location],
         pixmap: &mut Pixmap,
@@ -191,7 +184,7 @@ impl Button {
             pb.finish().unwrap()
         };
 
-        let button_bg = if state == WindowState::Active && btn_state == ButtonState::Hovered {
+        let button_bg = if btn_state == ButtonState::Hovered {
             colors.button_hover_paint()
         } else {
             colors.button_idle_paint()

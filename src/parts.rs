@@ -72,11 +72,11 @@ impl Parts {
         inner: Rc<RefCell<Inner>>,
     ) {
         if self.decoration.is_none() {
-            let header = Part::new(&parent, &compositor, &subcompositor, Some(inner.clone()));
-            let top = Part::new(&parent, &compositor, &subcompositor, None);
-            let left = Part::new(&parent, &compositor, &subcompositor, None);
-            let right = Part::new(&parent, &compositor, &subcompositor, None);
-            let bottom = Part::new(&parent, &compositor, &subcompositor, None);
+            let header = Part::new(parent, compositor, subcompositor, Some(inner));
+            let top = Part::new(parent, compositor, subcompositor, None);
+            let left = Part::new(parent, compositor, subcompositor, None);
+            let right = Part::new(parent, compositor, subcompositor, None);
+            let bottom = Part::new(parent, compositor, subcompositor, None);
 
             self.decoration = Some(Decoration {
                 header,
@@ -160,10 +160,9 @@ impl Part {
             surface::setup_surface(
                 compositor.create_surface(),
                 Some(move |dpi, surface: WlSurface, ddata: DispatchData| {
-                    dbg!(&dpi);
                     surface.set_buffer_scale(dpi);
                     surface.commit();
-                    (&mut inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
+                    (inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
                 }),
             )
         } else {

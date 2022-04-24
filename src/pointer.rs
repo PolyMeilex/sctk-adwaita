@@ -62,14 +62,14 @@ impl PointerUserData {
                 );
                 self.current_surface = inner.parts.find_decoration_part(&surface);
                 self.position = (surface_x, surface_y);
-                change_pointer(&pointer, &inner, self.location, Some(serial))
+                change_pointer(pointer, inner, self.location, Some(serial))
             }
             Event::Leave { serial, .. } => {
                 self.current_surface = DecorationPartKind::None;
 
                 self.location = Location::None;
-                change_pointer(&pointer, &inner, self.location, Some(serial));
-                (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
+                change_pointer(pointer, inner, self.location, Some(serial));
+                (inner.implem)(FrameRequest::Refresh, 0, ddata);
             }
             Event::Motion {
                 surface_x,
@@ -83,14 +83,14 @@ impl PointerUserData {
                     match (newpos, self.location) {
                         (Location::Button(_), _) | (_, Location::Button(_)) => {
                             // pointer movement involves a button, request refresh
-                            (&mut inner.implem)(FrameRequest::Refresh, 0, ddata);
+                            (inner.implem)(FrameRequest::Refresh, 0, ddata);
                         }
                         _ => (),
                     }
                     // we changed of part of the decoration, pointer image
                     // may need to be changed
                     self.location = newpos;
-                    change_pointer(&pointer, &inner, self.location, None)
+                    change_pointer(pointer, inner, self.location, None)
                 }
             }
             Event::Button {
@@ -103,15 +103,15 @@ impl PointerUserData {
                     let request = match button {
                         // Left mouse button.
                         0x110 => {
-                            request_for_location_on_lmb(&self, inner.maximized, inner.resizable)
+                            request_for_location_on_lmb(self, inner.maximized, inner.resizable)
                         }
                         // Right mouse button.
-                        0x111 => request_for_location_on_rmb(&self),
+                        0x111 => request_for_location_on_rmb(self),
                         _ => None,
                     };
 
                     if let Some(request) = request {
-                        (&mut inner.implem)(request, serial, ddata);
+                        (inner.implem)(request, serial, ddata);
                     }
                 }
             }

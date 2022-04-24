@@ -8,21 +8,21 @@ use smithay_client_toolkit::reexports::client;
 
 use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
 use client::{Attached, DispatchData};
-use tiny_skia::{
-    Color, FillRule, Paint, Path, PathBuilder, Pixmap, Point, Rect, Shader, Stroke, Transform,
-};
+use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, Point, Rect, Transform};
 
 use smithay_client_toolkit::{
     seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer},
     shm::AutoMemPool,
-    window::{ButtonState, Frame, FrameRequest, State, WindowState},
+    window::{Frame, FrameRequest, State, WindowState},
 };
 
 mod theme;
-use theme::{ColorTheme, BORDER_COLOR, BORDER_SIZE, HEADER_SIZE};
+use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
 use buttons::{ButtonKind, Buttons};
+
+use crate::theme::ColorMap;
 
 mod parts;
 mod pointer;
@@ -322,10 +322,10 @@ impl Frame for AdwaitaFrame {
                     4 * header_width as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    draw_buttons(
-                        canvas,
-                        header_width,
-                        header_height,
+                    let mut pixmap = Pixmap::new(header_width, header_height).unwrap();
+
+                    draw_headerbar(
+                        &mut pixmap,
                         header_scale as f32,
                         inner.resizable,
                         self.active,
@@ -345,6 +345,12 @@ impl Frame for AdwaitaFrame {
                             })
                             .collect::<Vec<Location>>(),
                     );
+
+                    let buff = pixmap.data();
+
+                    for (id, pixel) in canvas.iter_mut().enumerate() {
+                        *pixel = buff[id];
+                    }
 
                     // decoration
                     //     .header
@@ -566,16 +572,78 @@ impl Drop for AdwaitaFrame {
     }
 }
 
-fn rounded_headerbar(
-    mut pb: PathBuilder,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    radius: f32,
-) -> Option<Path> {
+fn draw_headerbar(
+    pixmap: &mut Pixmap,
+    scale: f32,
+    maximizable: bool,
+    state: WindowState,
+    colors: &ColorTheme,
+    buttons: &Buttons,
+    mouses: &[Location],
+) {
+    let border_size = BORDER_SIZE as f32 * scale;
+
+    let margin_h = border_size;
+    let margin_v = border_size;
+
+    let colors = colors.for_state(state);
+
+    draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors);
+
+    if buttons.close.x() > margin_h {
+        buttons.close.draw_close(scale, colors, mouses, pixmap);
+    }
+
+    if buttons.maximize.x() > margin_h {
+        buttons
+            .maximize
+            .draw_maximize(scale, colors, mouses, maximizable, pixmap);
+    }
+
+    if buttons.minimize.x() > margin_h {
+        buttons
+            .minimize
+            .draw_minimize(scale, colors, mouses, pixmap);
+    }
+}
+
+fn draw_headerbar_bg(
+    pixmap: &mut Pixmap,
+    scale: f32,
+    margin_h: f32,
+    margin_v: f32,
+    colors: &ColorMap,
+) {
+    let w = pixmap.width() as f32;
+    let h = pixmap.height() as f32;
+
+    let radius = 10.0 * scale;
+
+    let margin_h = margin_h - 1.0;
+    let w = w - margin_h * 2.0;
+
+    let bg = rounded_headerbar_shape(margin_h, margin_v, w, h, radius).unwrap();
+
+    pixmap.fill_path(
+        &bg,
+        &colors.headerbar_paint(),
+        FillRule::Winding,
+        Transform::identity(),
+        None,
+    );
+
+    pixmap.fill_rect(
+        Rect::from_xywh(margin_h, h - 1.0, w, h).unwrap(),
+        &colors.border_paint(),
+        Transform::identity(),
+        None,
+    );
+}
+
+fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Option<Path> {
     use std::f32::consts::FRAC_1_SQRT_2;
 
+    let mut pb = PathBuilder::new();
     let mut cursor = Point::from_xy(x, y);
 
     // !!!
@@ -638,94 +706,4 @@ fn rounded_headerbar(
     pb.close();
 
     pb.finish()
-}
-
-fn draw_buttons(
-    canvas: &mut [u8],
-    w: u32,
-    h: u32,
-    scale: f32,
-    maximizable: bool,
-    state: WindowState,
-    colors: &ColorTheme,
-    buttons: &Buttons,
-    mouses: &[Location],
-) {
-    let border_size = BORDER_SIZE as f32 * scale;
-
-    let margin_top = border_size;
-    let margin_left = border_size;
-
-    let colors = if state == WindowState::Active {
-        &colors.active
-    } else {
-        &colors.inactive
-    };
-
-    let mut pixmap = Pixmap::new(w, h).unwrap();
-
-    {
-        let h = h as f32;
-        let w = w as f32;
-
-        let r = 10.0 * scale;
-
-        let margin_left = margin_left - 1.0;
-        let w = w - margin_left * 2.0;
-
-        let corner_l = {
-            let pb = PathBuilder::new();
-
-            let x = margin_left;
-            let y = margin_top;
-
-            rounded_headerbar(pb, x, y, w, h, r).unwrap()
-        };
-
-        let headerbar_paint = colors.headerbar_paint();
-        pixmap.fill_path(
-            &corner_l,
-            &headerbar_paint,
-            FillRule::Winding,
-            Transform::identity(),
-            None,
-        );
-
-        // Line
-
-        let mut line = Paint::default();
-        line.set_color_rgba8(220, 220, 220, 255);
-        line.anti_alias = false;
-
-        pixmap.fill_rect(
-            Rect::from_xywh(margin_left, h - 1.0, w, h).unwrap(),
-            &line,
-            Transform::identity(),
-            None,
-        );
-    }
-
-    if buttons.close.x() > margin_left {
-        buttons
-            .close
-            .draw_close(scale, state, colors, mouses, &mut pixmap);
-    }
-
-    if buttons.maximize.x() > margin_left {
-        buttons
-            .maximize
-            .draw_maximize(scale, state, colors, mouses, maximizable, &mut pixmap);
-    }
-
-    if buttons.minimize.x() > margin_left {
-        buttons
-            .minimize
-            .draw_minimize(scale, state, colors, mouses, &mut pixmap);
-    }
-
-    let buff = pixmap.data();
-
-    for (id, pixel) in canvas.iter_mut().enumerate() {
-        *pixel = buff[id];
-    }
 }
