@@ -298,14 +298,6 @@ impl Frame for AdwaitaFrame {
             let right_scale = decoration.right.scale();
             let bottom_scale = decoration.bottom.scale();
 
-            // dbg!(
-            //     header_scale,
-            //     top_scale,
-            //     left_scale,
-            //     right_scale,
-            //     bottom_scale
-            // );
-
             let (header_width, header_height) = self.buttons.borrow().scaled_size();
             let header_height = header_height + BORDER_SIZE * header_scale;
 

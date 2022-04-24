@@ -169,7 +169,6 @@ impl Part {
             surface::setup_surface(
                 compositor.create_surface(),
                 Some(move |dpi, surface: WlSurface, _ddata: DispatchData| {
-                    dbg!(&dpi);
                     surface.set_buffer_scale(dpi);
                     surface.commit();
                 }),
