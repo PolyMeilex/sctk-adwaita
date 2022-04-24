@@ -2,6 +2,12 @@
 name = "sctk-adwaita"
 version = "0.1.0"
 edition = "2021"
+authors = ["Poly <marynczak.bartlomiej@gmail.com>"]
+keywords = ["sctk"]
+license = "MIT"
+repository = "https://github.com/PolyMeilex/sctk-adwaita"
+documentation = "https://docs.rs/sctk-adwaita"
+description = "Adwaita-like SCTK Frame"
 
 [dependencies]
 smithay-client-toolkit = "0.15"
