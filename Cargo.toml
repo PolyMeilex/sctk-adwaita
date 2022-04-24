@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 smithay-client-toolkit = "0.15"
-tiny-skia = "0.6.3"
+tiny-skia = { version = "0.6.3", features = ["std", "simd"] }
 log = "0.4"
