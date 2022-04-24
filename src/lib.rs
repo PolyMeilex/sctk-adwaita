@@ -94,6 +94,10 @@ fn precise_location(buttons: &Buttons, old: Location, width: u32, x: f64, y: f64
                     } else {
                         Location::Top
                     }
+                } else if x < f64::from(BORDER_SIZE) {
+                    Location::TopLeft
+                } else if x > f64::from(width) {
+                    Location::TopRight
                 } else {
                     Location::Head
                 }
