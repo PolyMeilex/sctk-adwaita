@@ -15,7 +15,7 @@ use crate::{
     buttons::{ButtonKind, Buttons},
     parts::DecorationPartKind,
     precise_location,
-    theme::HEADER_SIZE,
+    theme::{BORDER_SIZE, HEADER_SIZE},
     Inner, Location,
 };
 
@@ -176,9 +176,9 @@ fn request_for_location_on_rmb(pointer_data: &PointerUserData) -> Option<FrameRe
     match pointer_data.location {
         Location::Head | Location::Button(_) => Some(FrameRequest::ShowMenu(
             pointer_data.seat.clone(),
-            pointer_data.position.0 as i32,
+            pointer_data.position.0 as i32 - BORDER_SIZE as i32,
             // We must offset it by header size for precise position.
-            pointer_data.position.1 as i32 - HEADER_SIZE as i32,
+            pointer_data.position.1 as i32 - (HEADER_SIZE as i32 + BORDER_SIZE as i32),
         )),
         _ => None,
     }
