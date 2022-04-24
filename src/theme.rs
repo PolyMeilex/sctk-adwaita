@@ -1,7 +1,8 @@
 use tiny_skia::{Color, Paint, Shader};
 
 pub const BORDER_SIZE: u32 = 10;
-pub const BORDER_COLOR: [u8; 4] = [00, 00, 00, 10];
+// pub const BORDER_COLOR: [u8; 4] = [200, 200, 200, 255];
+pub const BORDER_COLOR: [u8; 4] = [0, 0, 255, 255];
 pub const HEADER_SIZE: u32 = 35;
 
 // Border CF CF CF
@@ -12,6 +13,7 @@ pub struct ColorMap {
     pub button_idle: Color,
     pub button_hover: Color,
     pub button_icon: Color,
+    pub border_color: Color,
 }
 
 impl ColorMap {
@@ -45,6 +47,13 @@ impl ColorMap {
             ..Default::default()
         }
     }
+
+    pub fn border_paint(&self) -> Paint {
+        Paint {
+            shader: Shader::SolidColor(self.border_color),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -61,12 +70,14 @@ impl Default for ColorTheme {
                 button_idle: Color::from_rgba8(216, 216, 216, 255),
                 button_hover: Color::from_rgba8(207, 207, 207, 255),
                 button_icon: Color::from_rgba8(42, 42, 42, 255),
+                border_color: Color::from_rgba8(220, 220, 220, 255),
             },
             inactive: ColorMap {
                 headerbar: Color::from_rgba8(250, 250, 250, 255),
                 button_idle: Color::from_rgba8(240, 240, 240, 255),
                 button_hover: Color::from_rgba8(207, 207, 207, 255),
                 button_icon: Color::from_rgba8(148, 148, 148, 255),
+                border_color: Color::from_rgba8(220, 220, 220, 255),
             },
         }
     }

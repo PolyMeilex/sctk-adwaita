@@ -8,7 +8,9 @@ use smithay_client_toolkit::reexports::client;
 
 use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
 use client::{Attached, DispatchData};
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{
+    Color, FillRule, Paint, Path, PathBuilder, Pixmap, Point, Rect, Shader, Stroke, Transform,
+};
 
 use smithay_client_toolkit::{
     seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer},
@@ -78,17 +80,26 @@ impl fmt::Debug for Inner {
 
 fn precise_location(buttons: &Buttons, old: Location, width: u32, x: f64, y: f64) -> Location {
     match old {
-        Location::Head | Location::Button(_) => buttons.find_button(x, y),
-
-        Location::Top | Location::TopLeft | Location::TopRight => {
-            if x <= f64::from(BORDER_SIZE) {
-                Location::TopLeft
-            } else if x >= f64::from(width + BORDER_SIZE) {
-                Location::TopRight
-            } else {
-                Location::Top
+        Location::Head
+        | Location::Button(_)
+        | Location::Top
+        | Location::TopLeft
+        | Location::TopRight => match buttons.find_button(x, y) {
+            Location::Head => {
+                if y <= f64::from(BORDER_SIZE) {
+                    if x <= f64::from(BORDER_SIZE) {
+                        Location::TopLeft
+                    } else if x >= f64::from(width + BORDER_SIZE) {
+                        Location::TopRight
+                    } else {
+                        Location::Top
+                    }
+                } else {
+                    Location::Head
+                }
             }
-        }
+            other => other,
+        },
 
         Location::Bottom | Location::BottomLeft | Location::BottomRight => {
             if x <= f64::from(BORDER_SIZE) {
@@ -254,7 +265,9 @@ impl Frame for AdwaitaFrame {
 
     fn resize(&mut self, newsize: (u32, u32)) {
         self.inner.borrow_mut().size = newsize;
-        self.buttons.borrow_mut().arrange(newsize.0);
+        self.buttons
+            .borrow_mut()
+            .arrange(newsize.0 + BORDER_SIZE * 2);
     }
 
     fn redraw(&mut self) {
@@ -277,15 +290,30 @@ impl Frame for AdwaitaFrame {
             let header_scale = decoration.header.scale();
             self.buttons.borrow_mut().update_scale(header_scale);
 
-            let top_scale = decoration.header.scale();
             let left_scale = decoration.left.scale();
             let right_scale = decoration.right.scale();
             let bottom_scale = decoration.bottom.scale();
 
+            // dbg!(
+            //     header_scale,
+            //     top_scale,
+            //     left_scale,
+            //     right_scale,
+            //     bottom_scale
+            // );
+
             let (header_width, header_height) = self.buttons.borrow().scaled_size();
+            let header_height = header_height + BORDER_SIZE * header_scale;
 
             {
                 // Create the buffers and draw
+
+                let colors = if self.active == WindowState::Active {
+                    &self.colors.active
+                } else {
+                    &self.colors.inactive
+                };
+                let border_paint = colors.border_paint();
 
                 // -> head-subsurface
                 if let Ok((canvas, buffer)) = self.pool.buffer(
@@ -296,12 +324,13 @@ impl Frame for AdwaitaFrame {
                 ) {
                     draw_buttons(
                         canvas,
-                        width,
-                        header_scale,
+                        header_width,
+                        header_height,
+                        header_scale as f32,
                         inner.resizable,
                         self.active,
                         &self.colors,
-                        &mut self.buttons.borrow_mut(),
+                        &self.buttons.borrow(),
                         &self
                             .pointers
                             .iter()
@@ -317,10 +346,14 @@ impl Frame for AdwaitaFrame {
                             .collect::<Vec<Location>>(),
                     );
 
-                    decoration
-                        .header
-                        .subsurface
-                        .set_position(0, -(HEADER_SIZE as i32));
+                    // decoration
+                    //     .header
+                    //     .subsurface
+                    //     .set_position(-(BORDER_SIZE as i32), -(HEADER_SIZE as i32));
+                    decoration.header.subsurface.set_position(
+                        -(BORDER_SIZE as i32),
+                        -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                    );
                     decoration.header.surface.attach(Some(&buffer), 0, 0);
                     if self.surface_version >= 4 {
                         decoration.header.surface.damage_buffer(
@@ -346,69 +379,35 @@ impl Frame for AdwaitaFrame {
                     return;
                 }
 
-                // -> top-subsurface
-                if let Ok((canvas, buffer)) = self.pool.buffer(
-                    ((width + 2 * BORDER_SIZE) * top_scale) as i32,
-                    (BORDER_SIZE * top_scale) as i32,
-                    (4 * top_scale * (width + 2 * BORDER_SIZE)) as i32,
-                    wl_shm::Format::Argb8888,
-                ) {
-                    for pixel in canvas.chunks_exact_mut(4) {
-                        pixel[0] = 0;
-                        pixel[1] = 0;
-                        pixel[2] = 0;
-                        pixel[3] = 0;
-                    }
-
-                    decoration.top.subsurface.set_position(
-                        -(BORDER_SIZE as i32),
-                        -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
-                    );
-                    decoration.top.surface.attach(Some(&buffer), 0, 0);
-                    if self.surface_version >= 4 {
-                        decoration.top.surface.damage_buffer(
-                            0,
-                            0,
-                            ((width + 2 * BORDER_SIZE) * top_scale) as i32,
-                            (BORDER_SIZE * top_scale) as i32,
-                        );
-                    } else {
-                        // surface is old and does not support damage_buffer, so we damage
-                        // in surface coordinates and hope it is not rescaled
-                        decoration.top.surface.damage(
-                            0,
-                            0,
-                            (width + 2 * BORDER_SIZE) as i32,
-                            BORDER_SIZE as i32,
-                        );
-                    }
-                    decoration.top.surface.commit();
-                }
-
                 let w = ((width + 2 * BORDER_SIZE) * bottom_scale) as i32;
+                let h = (BORDER_SIZE * bottom_scale) as i32;
                 // -> bottom-subsurface
                 if let Ok((canvas, buffer)) = self.pool.buffer(
                     w,
-                    (BORDER_SIZE * bottom_scale) as i32,
+                    h,
                     (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                        let vid = id as i32 % w;
-                        let hid = id as i32 / w;
-                        let color = if vid > BORDER_SIZE as i32 - 2
-                            && vid < w - (BORDER_SIZE as i32 - 1)
-                            && hid < 1
-                        {
-                            BORDER_COLOR
-                        } else {
-                            [0, 0, 0, 0]
-                        };
+                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
 
-                        pixel[0] = color[0];
-                        pixel[1] = color[1];
-                        pixel[2] = color[2];
-                        pixel[3] = color[3];
+                    let size = 1.0;
+                    let x = BORDER_SIZE as f32 * bottom_scale as f32 - 1.0;
+                    pixmap.fill_rect(
+                        Rect::from_xywh(
+                            x,
+                            0.0,
+                            w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0,
+                            size,
+                        )
+                        .unwrap(),
+                        &border_paint,
+                        Transform::identity(),
+                        None,
+                    );
+
+                    let data = pixmap.data();
+                    for (id, pixel) in canvas.iter_mut().enumerate() {
+                        *pixel = data[id];
                     }
 
                     decoration
@@ -437,7 +436,7 @@ impl Frame for AdwaitaFrame {
                 }
 
                 let w = (BORDER_SIZE * left_scale) as i32;
-                let h = ((height + HEADER_SIZE) * left_scale) as i32;
+                let h = (height * left_scale) as i32;
                 // -> left-subsurface
                 if let Ok((canvas, buffer)) = self.pool.buffer(
                     w,
@@ -445,32 +444,31 @@ impl Frame for AdwaitaFrame {
                     4 * (BORDER_SIZE * left_scale) as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                        let vid = id as i32 % w;
-                        let hid = id as i32 / w;
-                        let color = if vid > w - 2 && hid > BORDER_SIZE as i32 {
-                            BORDER_COLOR
-                        } else {
-                            [0, 0, 0, 0]
-                        };
-                        pixel[0] = color[0];
-                        pixel[1] = color[1];
-                        pixel[2] = color[2];
-                        pixel[3] = color[3];
+                    let mut bg = Paint::default();
+                    bg.set_color_rgba8(255, 0, 0, 255);
+
+                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+
+                    let size = 1.0;
+                    pixmap.fill_rect(
+                        Rect::from_xywh(w as f32 - size, 0.0, w as f32, h as f32).unwrap(),
+                        &border_paint,
+                        Transform::identity(),
+                        None,
+                    );
+
+                    let data = pixmap.data();
+                    for (id, pixel) in canvas.iter_mut().enumerate() {
+                        *pixel = data[id];
                     }
 
                     decoration
                         .left
                         .subsurface
-                        .set_position(-(BORDER_SIZE as i32), -(HEADER_SIZE as i32));
+                        .set_position(-(BORDER_SIZE as i32), 0);
                     decoration.left.surface.attach(Some(&buffer), 0, 0);
                     if self.surface_version >= 4 {
-                        decoration.left.surface.damage_buffer(
-                            0,
-                            0,
-                            (BORDER_SIZE * left_scale) as i32,
-                            ((height + HEADER_SIZE) * left_scale) as i32,
-                        );
+                        decoration.left.surface.damage_buffer(0, 0, w, h);
                     } else {
                         // surface is old and does not support damage_buffer, so we damage
                         // in surface coordinates and hope it is not rescaled
@@ -485,48 +483,43 @@ impl Frame for AdwaitaFrame {
                 }
 
                 let w = (BORDER_SIZE * right_scale) as i32;
+                let h = (height * right_scale) as i32;
                 // -> right-subsurface
                 if let Ok((canvas, buffer)) = self.pool.buffer(
                     w,
-                    ((height + HEADER_SIZE) * right_scale) as i32,
+                    h,
                     4 * (BORDER_SIZE * right_scale) as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    for (id, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-                        let wid = id as i32 % w;
-                        let hid = id as i32 / w;
-                        let color = if wid < 1 && hid > BORDER_SIZE as i32 {
-                            BORDER_COLOR
-                        } else {
-                            [0, 0, 0, 0]
-                        };
-                        pixel[0] = color[0];
-                        pixel[1] = color[1];
-                        pixel[2] = color[2];
-                        pixel[3] = color[3];
+                    let mut bg = Paint::default();
+                    bg.set_color_rgba8(255, 0, 0, 255);
+
+                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+
+                    let size = 1.0;
+                    pixmap.fill_rect(
+                        Rect::from_xywh(0.0, 0.0, size, h as f32).unwrap(),
+                        &border_paint,
+                        Transform::identity(),
+                        None,
+                    );
+
+                    let data = pixmap.data();
+                    for (id, pixel) in canvas.iter_mut().enumerate() {
+                        *pixel = data[id];
                     }
 
-                    decoration
-                        .right
-                        .subsurface
-                        .set_position(width as i32, -(HEADER_SIZE as i32));
+                    decoration.right.subsurface.set_position(width as i32, 0);
                     decoration.right.surface.attach(Some(&buffer), 0, 0);
                     if self.surface_version >= 4 {
-                        decoration.right.surface.damage_buffer(
-                            0,
-                            0,
-                            (BORDER_SIZE * right_scale) as i32,
-                            ((height + HEADER_SIZE) * right_scale) as i32,
-                        );
+                        decoration.right.surface.damage_buffer(0, 0, w, h);
                     } else {
                         // surface is old and does not support damage_buffer, so we damage
                         // in surface coordinates and hope it is not rescaled
-                        decoration.right.surface.damage(
-                            0,
-                            0,
-                            BORDER_SIZE as i32,
-                            (height + HEADER_SIZE) as i32,
-                        );
+                        decoration
+                            .right
+                            .surface
+                            .damage(0, 0, BORDER_SIZE as i32, height as i32);
                     }
                     decoration.right.surface.commit();
                 }
@@ -573,19 +566,95 @@ impl Drop for AdwaitaFrame {
     }
 }
 
+fn rounded_headerbar(
+    mut pb: PathBuilder,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    radius: f32,
+) -> Option<Path> {
+    use std::f32::consts::FRAC_1_SQRT_2;
+
+    let mut cursor = Point::from_xy(x, y);
+
+    // !!!
+    // This code is heavily "inspired" by https://gitlab.com/snakedye/snui/
+    // So technically it should be licensed under MPL-2.0, sorry about that 🥺 👉👈
+    // !!!
+
+    // Positioning the cursor
+    cursor.y += radius;
+    pb.move_to(cursor.x, cursor.y);
+
+    // Drawing the outline
+    pb.cubic_to(
+        cursor.x,
+        cursor.y,
+        cursor.x,
+        cursor.y - FRAC_1_SQRT_2 * radius,
+        {
+            cursor.x += radius;
+            cursor.x
+        },
+        {
+            cursor.y -= radius;
+            cursor.y
+        },
+    );
+    pb.line_to(
+        {
+            cursor.x = x + width - radius;
+            cursor.x
+        },
+        cursor.y,
+    );
+    pb.cubic_to(
+        cursor.x,
+        cursor.y,
+        cursor.x + FRAC_1_SQRT_2 * radius,
+        cursor.y,
+        {
+            cursor.x += radius;
+            cursor.x
+        },
+        {
+            cursor.y += radius;
+            cursor.y
+        },
+    );
+    pb.line_to(cursor.x, {
+        cursor.y = y + height;
+        cursor.y
+    });
+    pb.line_to(
+        {
+            cursor.x = x;
+            cursor.x
+        },
+        cursor.y,
+    );
+
+    pb.close();
+
+    pb.finish()
+}
+
 fn draw_buttons(
     canvas: &mut [u8],
-    width: u32,
-    scale: u32,
+    w: u32,
+    h: u32,
+    scale: f32,
     maximizable: bool,
     state: WindowState,
     colors: &ColorTheme,
-    buttons: &mut Buttons,
+    buttons: &Buttons,
     mouses: &[Location],
 ) {
-    let w = width;
-    let h = HEADER_SIZE;
-    let scale = scale as usize;
+    let border_size = BORDER_SIZE as f32 * scale;
+
+    let margin_top = border_size;
+    let margin_left = border_size;
 
     let colors = if state == WindowState::Active {
         &colors.active
@@ -593,66 +662,31 @@ fn draw_buttons(
         &colors.inactive
     };
 
-    let headerbar_paint = colors.headerbar_paint();
-
-    let mut button_icon_paint = colors.button_icon_paint();
-    let button_idle_paint = colors.button_idle_paint();
-    let button_hover_paint = colors.button_hover_paint();
-
-    let mut pixmap = Pixmap::new(w as u32 * scale as u32, h as u32 * scale as u32).unwrap();
+    let mut pixmap = Pixmap::new(w, h).unwrap();
 
     {
-        let h = h as f32 * scale as f32;
-        let w = w as f32 * scale as f32;
+        let h = h as f32;
+        let w = w as f32;
 
-        let r = 10.0 * scale as f32;
-        let x = r;
-        let y = r;
+        let r = 10.0 * scale;
+
+        let margin_left = margin_left - 1.0;
+        let w = w - margin_left * 2.0;
 
         let corner_l = {
-            let mut pb = PathBuilder::new();
-            pb.push_circle(x, y, r);
-            pb.finish().unwrap()
+            let pb = PathBuilder::new();
+
+            let x = margin_left;
+            let y = margin_top;
+
+            rounded_headerbar(pb, x, y, w, h, r).unwrap()
         };
 
+        let headerbar_paint = colors.headerbar_paint();
         pixmap.fill_path(
             &corner_l,
             &headerbar_paint,
             FillRule::Winding,
-            Transform::identity(),
-            None,
-        );
-
-        pixmap.fill_rect(
-            Rect::from_xywh(0.0, y, r, h - r).unwrap(),
-            &headerbar_paint,
-            Transform::identity(),
-            None,
-        );
-
-        if let Some(rect) = Rect::from_xywh(x, 0.0, w - r * 2.0, h) {
-            pixmap.fill_rect(rect, &headerbar_paint, Transform::identity(), None);
-        }
-
-        let x = w - r;
-
-        let corner_r = {
-            let mut pb = PathBuilder::new();
-            pb.push_circle(x, y, r);
-            pb.finish().unwrap()
-        };
-
-        pixmap.fill_path(
-            &corner_r,
-            &headerbar_paint,
-            FillRule::Winding,
-            Transform::identity(),
-            None,
-        );
-
-        pixmap.fill_rect(
-            Rect::from_xywh(x, y, r, h - r).unwrap(),
-            &headerbar_paint,
             Transform::identity(),
             None,
         );
@@ -664,203 +698,29 @@ fn draw_buttons(
         line.anti_alias = false;
 
         pixmap.fill_rect(
-            Rect::from_xywh(0.0, h - 1.0, w, h).unwrap(),
+            Rect::from_xywh(margin_left, h - 1.0, w, h).unwrap(),
             &line,
             Transform::identity(),
             None,
         );
     }
 
-    {
-        // Draw the close button
-        let btn_state = if mouses
-            .iter()
-            .any(|&l| l == Location::Button(ButtonKind::Close))
-        {
-            ButtonState::Hovered
-        } else {
-            ButtonState::Idle
-        };
-
-        let radius = buttons.close.radius();
-
-        let x = buttons.close.center_x();
-        let y = buttons.close.center_y();
-
-        let path1 = {
-            let mut pb = PathBuilder::new();
-            pb.push_circle(x, y, radius);
-            pb.finish().unwrap()
-        };
-
-        if state == WindowState::Active && btn_state == ButtonState::Hovered {
-            pixmap.fill_path(
-                &path1,
-                &button_hover_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        } else {
-            pixmap.fill_path(
-                &path1,
-                &button_idle_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        }
-
-        let x_icon = {
-            let size = 3.5;
-            let mut pb = PathBuilder::new();
-
-            {
-                let sx = x - size;
-                let sy = y - size;
-                let ex = x + size;
-                let ey = y + size;
-
-                pb.move_to(sx, sy);
-                pb.line_to(ex, ey);
-                pb.close();
-            }
-
-            {
-                let sx = x - size;
-                let sy = y + size;
-                let ex = x + size;
-                let ey = y - size;
-
-                pb.move_to(sx, sy);
-                pb.line_to(ex, ey);
-                pb.close();
-            }
-
-            pb.finish().unwrap()
-        };
-
-        button_icon_paint.anti_alias = true;
-        pixmap.stroke_path(
-            &x_icon,
-            &button_icon_paint,
-            &Stroke {
-                width: 1.1,
-                ..Default::default()
-            },
-            Transform::identity(),
-            None,
-        );
+    if buttons.close.x() > margin_left {
+        buttons
+            .close
+            .draw_close(scale, state, colors, mouses, &mut pixmap);
     }
 
-    {
-        let btn_state = if !maximizable {
-            ButtonState::Disabled
-        } else if mouses
-            .iter()
-            .any(|&l| l == Location::Button(ButtonKind::Maximize))
-        {
-            ButtonState::Hovered
-        } else {
-            ButtonState::Idle
-        };
-
-        let radius = buttons.maximize.radius();
-
-        let x = buttons.maximize.center_x();
-        let y = buttons.maximize.center_y();
-
-        let path1 = {
-            let mut pb = PathBuilder::new();
-            pb.push_circle(x, y, radius);
-            pb.finish().unwrap()
-        };
-
-        if state == WindowState::Active && btn_state == ButtonState::Hovered {
-            pixmap.fill_path(
-                &path1,
-                &button_hover_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        } else {
-            pixmap.fill_path(
-                &path1,
-                &button_idle_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        }
-
-        let path2 = {
-            let size = 8.0;
-            let hsize = size / 2.0;
-            let mut pb = PathBuilder::new();
-            pb.push_rect(x - hsize, y - hsize, size, size);
-            pb.finish().unwrap()
-        };
-
-        button_icon_paint.anti_alias = false;
-        pixmap.stroke_path(
-            &path2,
-            &button_icon_paint,
-            &Stroke {
-                width: 1.0,
-                ..Default::default()
-            },
-            Transform::identity(),
-            None,
-        );
+    if buttons.maximize.x() > margin_left {
+        buttons
+            .maximize
+            .draw_maximize(scale, state, colors, mouses, maximizable, &mut pixmap);
     }
 
-    {
-        let btn_state = if mouses
-            .iter()
-            .any(|&l| l == Location::Button(ButtonKind::Minimize))
-        {
-            ButtonState::Hovered
-        } else {
-            ButtonState::Idle
-        };
-
-        let radius = buttons.minimize.radius();
-
-        let x = buttons.minimize.center_x();
-        let y = buttons.minimize.center_y();
-
-        let path1 = {
-            let mut pb = PathBuilder::new();
-            pb.push_circle(x, y, radius);
-            pb.finish().unwrap()
-        };
-
-        if state == WindowState::Active && btn_state == ButtonState::Hovered {
-            pixmap.fill_path(
-                &path1,
-                &button_hover_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        } else {
-            pixmap.fill_path(
-                &path1,
-                &button_idle_paint,
-                FillRule::Winding,
-                Transform::identity(),
-                None,
-            );
-        }
-
-        button_icon_paint.anti_alias = false;
-        pixmap.fill_rect(
-            Rect::from_xywh(x - 4.0, y + 4.0, 8.0, 1.0).unwrap(),
-            &button_icon_paint,
-            Transform::identity(),
-            None,
-        );
+    if buttons.minimize.x() > margin_left {
+        buttons
+            .minimize
+            .draw_minimize(scale, state, colors, mouses, &mut pixmap);
     }
 
     let buff = pixmap.data();

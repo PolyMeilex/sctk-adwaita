@@ -51,6 +51,8 @@ fn main() {
         window.refresh();
     }
 
+    println!("XDG_WINDOW: {:?}", window.surface());
+
     let mut next_action = None;
 
     sctk::WaylandSource::new(queue)
@@ -95,7 +97,12 @@ fn redraw(
         wl_shm::Format::Argb8888,
     )?;
 
-    canvas.fill(255);
+    for pixel in canvas.chunks_exact_mut(4) {
+        pixel[0] = 0;
+        pixel[1] = 0;
+        pixel[2] = 0;
+        pixel[3] = 100;
+    }
 
     surface.attach(Some(&new_buffer), 0, 0);
     if surface.as_ref().version() >= 4 {

@@ -160,6 +160,7 @@ impl Part {
             surface::setup_surface(
                 compositor.create_surface(),
                 Some(move |dpi, surface: WlSurface, ddata: DispatchData| {
+                    dbg!(&dpi);
                     surface.set_buffer_scale(dpi);
                     surface.commit();
                     (&mut inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
@@ -169,6 +170,7 @@ impl Part {
             surface::setup_surface(
                 compositor.create_surface(),
                 Some(move |dpi, surface: WlSurface, _ddata: DispatchData| {
+                    dbg!(&dpi);
                     surface.set_buffer_scale(dpi);
                     surface.commit();
                 }),
