@@ -12,5 +12,6 @@ description = "Adwaita-like SCTK Frame"
 [dependencies]
 smithay-client-toolkit = "0.15"
 tiny-skia = { version = "0.6.3", features = ["std", "simd"] }
-rusttype = { version = "0.9" }
 log = "0.4"
+
+ttf-parser = { version = "0.15", default-features = false, features = ["std"] }

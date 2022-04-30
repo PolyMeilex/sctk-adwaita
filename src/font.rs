@@ -1,10 +1,11 @@
-use rusttype::OutlineBuilder;
+use crate::minitype;
+use minitype::OutlineBuilder;
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform};
 
 #[derive(Debug)]
 struct GlyphTracer {
     path_builder: PathBuilder,
-    position: rusttype::Point<f32>,
+    position: minitype::Point<f32>,
 }
 
 impl GlyphTracer {
@@ -46,26 +47,26 @@ impl OutlineBuilder for GlyphTracer {
 /// Structure used to hold font objects.
 #[derive(Debug, Clone)]
 pub struct Font {
-    inner: rusttype::Font<'static>,
+    inner: minitype::Font<'static>,
 }
 
 impl Font {
     /// Read the font from byte stream.
     pub fn from_bytes(bytes: &'static [u8]) -> Result<Self, &'static str> {
-        rusttype::Font::try_from_bytes(bytes)
+        minitype::Font::try_from_bytes(bytes)
             .map(|font| Font { inner: font })
             .ok_or("Could not load font from bytes")
     }
 
     /// Measures the text width and height (given in pixels).
     pub fn measure_text(&self, text: &str, size: f64) -> (f64, f64) {
-        let scale = rusttype::Scale::uniform(size as f32);
+        let scale = minitype::Scale::uniform(size as f32);
         let v_metrics = self.inner.v_metrics(scale);
-        let offset = rusttype::point(0.0, v_metrics.ascent);
+        let offset = minitype::point(0.0, v_metrics.ascent);
 
         let pixel_height = size.ceil();
 
-        let glyphs: Vec<rusttype::PositionedGlyph> =
+        let glyphs: Vec<minitype::PositionedGlyph> =
             self.inner.layout(text, scale, offset).collect();
 
         let width = glyphs
@@ -89,25 +90,25 @@ impl Font {
         text: &str,
         max_x: f64,
     ) {
-        let scale = rusttype::Scale::uniform(font_size as f32);
+        let scale = minitype::Scale::uniform(font_size as f32);
 
         // The origin of a line of text is at the baseline (roughly where non-descending letters sit).
         // We don't want to clip the text, so we shift it down with an offset when laying it out.
         // v_metrics.ascent is the distance between the baseline and the highest edge of any glyph in
         // the font. That's enough to guarantee that there's no clipping.
         let v_metrics = self.inner.v_metrics(scale);
-        let offset = rusttype::point(0.0, v_metrics.ascent);
+        let offset = minitype::point(0.0, v_metrics.ascent);
 
-        let glyphs: Vec<rusttype::PositionedGlyph> =
+        let glyphs: Vec<minitype::PositionedGlyph> =
             self.inner.layout(text, scale, offset).collect();
 
         let mut glyph_tracer = GlyphTracer {
             path_builder: PathBuilder::new(),
-            position: rusttype::point(0.0, 0.0),
+            position: minitype::point(0.0, 0.0),
         };
         for g in glyphs.iter() {
             let mut gpos = match g.pixel_bounding_box() {
-                Some(bbox) => rusttype::point(bbox.min.x as f32, bbox.min.y as f32),
+                Some(bbox) => minitype::point(bbox.min.x as f32, bbox.min.y as f32),
                 None => {
                     continue;
                 }

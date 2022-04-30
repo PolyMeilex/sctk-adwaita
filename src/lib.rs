@@ -25,6 +25,7 @@ use buttons::{ButtonKind, Buttons};
 use crate::theme::ColorMap;
 
 mod font;
+mod minitype;
 mod parts;
 mod pointer;
 mod surface;
@@ -600,7 +601,7 @@ fn draw_headerbar(
     draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors);
 
     if let Some(title) = title {
-        let size = 20.0;
+        let size = 20.0 * scale as f64;
 
         let canvas_w = pixmap.width() as f32;
         let canvas_h = pixmap.height() as f32;
