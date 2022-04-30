@@ -6,7 +6,7 @@ use tiny_skia::{Paint, Shader};
 pub(crate) const BORDER_SIZE: u32 = 10;
 pub(crate) const HEADER_SIZE: u32 = 35;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ColorMap {
     pub headerbar: Color,
     pub button_idle: Color,
@@ -64,7 +64,7 @@ impl ColorMap {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ColorTheme {
     pub active: ColorMap,
     pub inactive: ColorMap,

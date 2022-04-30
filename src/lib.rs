@@ -123,6 +123,7 @@ fn precise_location(buttons: &Buttons, old: Location, width: u32, x: f64, y: f64
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FrameConfig {
     pub theme: ColorTheme,
 }
