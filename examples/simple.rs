@@ -39,7 +39,8 @@ fn main() {
         )
         .expect("Failed to create a window !");
 
-    window.set_title("Kbd Input".to_string());
+    // window.set_title("Kbd Input".to_string());
+    window.set_title("/usr/lib/xorg/modules/input".to_string());
 
     let mut pool = env
         .create_auto_pool()

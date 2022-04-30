@@ -24,9 +24,12 @@ use buttons::{ButtonKind, Buttons};
 
 use crate::theme::ColorMap;
 
+mod font;
 mod parts;
 mod pointer;
 mod surface;
+
+pub const ROBOTO_FONT: &[u8] = include_bytes!("../assets/Roboto-Regular.ttf");
 
 /*
  * Utilities
@@ -135,6 +138,8 @@ pub struct AdwaitaFrame {
 
     buttons: Rc<RefCell<Buttons>>,
     colors: ColorTheme,
+    font: font::Font,
+    title: Option<String>,
 }
 
 impl Frame for AdwaitaFrame {
@@ -182,6 +187,8 @@ impl Frame for AdwaitaFrame {
             surface_version: compositor.as_ref().version(),
             buttons: Default::default(),
             colors: Default::default(),
+            font: font::Font::from_bytes(ROBOTO_FONT).unwrap(),
+            title: None,
         })
     }
 
@@ -326,6 +333,8 @@ impl Frame for AdwaitaFrame {
                         inner.resizable,
                         self.active,
                         &self.colors,
+                        &self.font,
+                        self.title.as_ref(),
                         &self.buttons.borrow(),
                         &self
                             .pointers
@@ -555,7 +564,9 @@ impl Frame for AdwaitaFrame {
 
     fn set_config(&mut self, _config: ()) {}
 
-    fn set_title(&mut self, _title: String) {}
+    fn set_title(&mut self, title: String) {
+        self.title = Some(title);
+    }
 }
 
 impl Drop for AdwaitaFrame {
@@ -574,6 +585,8 @@ fn draw_headerbar(
     maximizable: bool,
     state: WindowState,
     colors: &ColorTheme,
+    font: &font::Font,
+    title: Option<&String>,
     buttons: &Buttons,
     mouses: &[Location],
 ) {
@@ -585,6 +598,47 @@ fn draw_headerbar(
     let colors = colors.for_state(state);
 
     draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors);
+
+    if let Some(title) = title {
+        let size = 20.0;
+
+        let canvas_w = pixmap.width() as f32;
+        let canvas_h = pixmap.height() as f32;
+
+        let header_w = canvas_w - margin_h * 2.0;
+        let header_h = canvas_h - margin_v;
+
+        let (w, h) = font.measure_text(title, size);
+        let text_w = w as f32;
+        let text_h = h as f32;
+
+        let x = header_w / 2.0 - text_w / 2.0;
+        let y = header_h / 2.0 - text_h / 2.0;
+
+        let x = margin_h + x;
+        let y = margin_v + y;
+
+        let (x, y) = if x + text_w < buttons.minimize.x() - 10.0 {
+            (x, y)
+        } else {
+            let y = header_h / 2.0 - text_h / 2.0;
+
+            let x = buttons.minimize.x() - text_w - 10.0;
+            let y = margin_v + y;
+            (x, y)
+        };
+
+        let x = x.max(margin_h + 5.0);
+
+        font.render_text(
+            size,
+            &colors.font_paint(),
+            pixmap,
+            (x as f64, y as f64),
+            title,
+            buttons.minimize.x() as f64 - 10.0,
+        );
+    }
 
     if buttons.close.x() > margin_h {
         buttons.close.draw_close(scale, colors, mouses, pixmap);

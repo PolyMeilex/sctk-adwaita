@@ -13,6 +13,7 @@ pub struct ColorMap {
     pub button_hover: Color,
     pub button_icon: Color,
     pub border_color: Color,
+    pub font_color: Color,
 }
 
 impl ColorMap {
@@ -53,6 +54,14 @@ impl ColorMap {
             ..Default::default()
         }
     }
+
+    pub fn font_paint(&self) -> Paint {
+        Paint {
+            shader: Shader::SolidColor(self.font_color),
+            anti_alias: true,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -70,6 +79,7 @@ impl Default for ColorTheme {
                 button_hover: Color::from_rgba8(207, 207, 207, 255),
                 button_icon: Color::from_rgba8(42, 42, 42, 255),
                 border_color: Color::from_rgba8(220, 220, 220, 255),
+                font_color: Color::from_rgba8(47, 47, 47, 255),
             },
             inactive: ColorMap {
                 headerbar: Color::from_rgba8(250, 250, 250, 255),
@@ -77,6 +87,7 @@ impl Default for ColorTheme {
                 button_hover: Color::from_rgba8(216, 216, 216, 255),
                 button_icon: Color::from_rgba8(148, 148, 148, 255),
                 border_color: Color::from_rgba8(220, 220, 220, 255),
+                font_color: Color::from_rgba8(150, 150, 150, 255),
             },
         }
     }
