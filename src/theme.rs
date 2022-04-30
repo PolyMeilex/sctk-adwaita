@@ -72,6 +72,12 @@ pub struct ColorTheme {
 
 impl Default for ColorTheme {
     fn default() -> Self {
+        Self::light()
+    }
+}
+
+impl ColorTheme {
+    pub fn light() -> Self {
         Self {
             active: ColorMap {
                 headerbar: Color::from_rgba8(235, 235, 235, 255),
@@ -91,9 +97,28 @@ impl Default for ColorTheme {
             },
         }
     }
-}
 
-impl ColorTheme {
+    pub fn dark() -> Self {
+        Self {
+            active: ColorMap {
+                headerbar: Color::from_rgba8(48, 48, 48, 255),
+                button_idle: Color::from_rgba8(69, 69, 69, 255),
+                button_hover: Color::from_rgba8(79, 79, 79, 255),
+                button_icon: Color::from_rgba8(255, 255, 255, 255),
+                border_color: Color::from_rgba8(58, 58, 58, 255),
+                font_color: Color::from_rgba8(255, 255, 255, 255),
+            },
+            inactive: ColorMap {
+                headerbar: Color::from_rgba8(36, 36, 36, 255),
+                button_idle: Color::from_rgba8(47, 47, 47, 255),
+                button_hover: Color::from_rgba8(57, 57, 57, 255),
+                button_icon: Color::from_rgba8(144, 144, 144, 255),
+                border_color: Color::from_rgba8(58, 58, 58, 255),
+                font_color: Color::from_rgba8(144, 144, 144, 255),
+            },
+        }
+    }
+
     pub fn for_state(&self, state: WindowState) -> &ColorMap {
         if state == WindowState::Active {
             &self.active

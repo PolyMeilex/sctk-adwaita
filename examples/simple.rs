@@ -41,6 +41,7 @@ fn main() {
 
     // window.set_title("Kbd Input".to_string());
     window.set_title("/usr/lib/xorg/modules/input".to_string());
+    window.set_frame_config(sctk_adwaita::FrameConfig::light());
 
     let mut pool = env
         .create_auto_pool()

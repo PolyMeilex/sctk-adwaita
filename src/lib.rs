@@ -17,7 +17,8 @@ use smithay_client_toolkit::{
 };
 
 mod theme;
-use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
+pub use theme::ColorTheme;
+use theme::{BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
 use buttons::{ButtonKind, Buttons};
@@ -123,6 +124,24 @@ fn precise_location(buttons: &Buttons, old: Location, width: u32, x: f64, y: f64
     }
 }
 
+pub struct FrameConfig {
+    pub theme: ColorTheme,
+}
+
+impl FrameConfig {
+    pub fn light() -> Self {
+        Self {
+            theme: ColorTheme::light(),
+        }
+    }
+
+    pub fn dark() -> Self {
+        Self {
+            theme: ColorTheme::dark(),
+        }
+    }
+}
+
 /// A simple set of decorations
 #[derive(Debug)]
 pub struct AdwaitaFrame {
@@ -145,7 +164,7 @@ pub struct AdwaitaFrame {
 
 impl Frame for AdwaitaFrame {
     type Error = ::std::io::Error;
-    type Config = ();
+    type Config = FrameConfig;
     fn init(
         base_surface: &wl_surface::WlSurface,
         compositor: &Attached<wl_compositor::WlCompositor>,
@@ -563,7 +582,9 @@ impl Frame for AdwaitaFrame {
         }
     }
 
-    fn set_config(&mut self, _config: ()) {}
+    fn set_config(&mut self, config: FrameConfig) {
+        self.colors = config.theme;
+    }
 
     fn set_title(&mut self, title: String) {
         self.title = Some(title);
