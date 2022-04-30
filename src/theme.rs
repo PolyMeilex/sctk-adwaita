@@ -1,10 +1,10 @@
 use smithay_client_toolkit::window::WindowState;
-use tiny_skia::{Color, Paint, Shader};
 
-pub const BORDER_SIZE: u32 = 10;
-pub const HEADER_SIZE: u32 = 35;
+pub use tiny_skia::Color;
+use tiny_skia::{Paint, Shader};
 
-// Border CF CF CF
+pub(crate) const BORDER_SIZE: u32 = 10;
+pub(crate) const HEADER_SIZE: u32 = 35;
 
 #[derive(Debug)]
 pub struct ColorMap {
@@ -17,7 +17,7 @@ pub struct ColorMap {
 }
 
 impl ColorMap {
-    pub fn headerbar_paint(&self) -> Paint {
+    pub(crate) fn headerbar_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.headerbar),
             anti_alias: true,
@@ -25,7 +25,7 @@ impl ColorMap {
         }
     }
 
-    pub fn button_idle_paint(&self) -> Paint {
+    pub(crate) fn button_idle_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.button_idle),
             anti_alias: true,
@@ -33,7 +33,7 @@ impl ColorMap {
         }
     }
 
-    pub fn button_hover_paint(&self) -> Paint {
+    pub(crate) fn button_hover_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.button_hover),
             anti_alias: true,
@@ -41,21 +41,21 @@ impl ColorMap {
         }
     }
 
-    pub fn button_icon_paint(&self) -> Paint {
+    pub(crate) fn button_icon_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.button_icon),
             ..Default::default()
         }
     }
 
-    pub fn border_paint(&self) -> Paint {
+    pub(crate) fn border_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.border_color),
             ..Default::default()
         }
     }
 
-    pub fn font_paint(&self) -> Paint {
+    pub(crate) fn font_paint(&self) -> Paint {
         Paint {
             shader: Shader::SolidColor(self.font_color),
             anti_alias: true,
@@ -118,8 +118,10 @@ impl ColorTheme {
             },
         }
     }
+}
 
-    pub fn for_state(&self, state: WindowState) -> &ColorMap {
+impl ColorTheme {
+    pub(crate) fn for_state(&self, state: WindowState) -> &ColorMap {
         if state == WindowState::Active {
             &self.active
         } else {

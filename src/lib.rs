@@ -16,9 +16,8 @@ use smithay_client_toolkit::{
     window::{Frame, FrameRequest, State, WindowState},
 };
 
-mod theme;
-pub use theme::ColorTheme;
-use theme::{BORDER_SIZE, HEADER_SIZE};
+pub mod theme;
+use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
 use buttons::{ButtonKind, Buttons};
