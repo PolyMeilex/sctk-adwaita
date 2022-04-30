@@ -19,7 +19,7 @@ use crate::{
     Inner, Location,
 };
 
-pub struct PointerUserData {
+pub(crate) struct PointerUserData {
     pub location: Location,
     pub current_surface: DecorationPartKind,
 

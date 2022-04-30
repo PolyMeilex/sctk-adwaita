@@ -59,7 +59,7 @@ impl Decoration {
 }
 
 #[derive(Default, Debug)]
-pub struct Parts {
+pub(crate) struct Parts {
     decoration: Option<Decoration>,
 }
 

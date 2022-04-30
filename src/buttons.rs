@@ -14,7 +14,7 @@ pub enum ButtonKind {
 }
 
 #[derive(Default, Debug)]
-pub struct Button {
+pub(crate) struct Button {
     x: f32,
     y: f32,
     size: f32,
@@ -243,7 +243,7 @@ impl Button {
 }
 
 #[derive(Debug)]
-pub struct Buttons {
+pub(crate) struct Buttons {
     pub close: Button,
     pub maximize: Button,
     pub minimize: Button,

@@ -30,14 +30,14 @@ mod parts;
 mod pointer;
 mod surface;
 
-pub const ROBOTO_FONT: &[u8] = include_bytes!("../assets/Roboto-Regular.ttf");
+const ROBOTO_FONT: &[u8] = include_bytes!("../assets/Roboto-Regular.ttf");
 
 /*
  * Utilities
  */
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Location {
+enum Location {
     None,
     Head,
     Top,
@@ -55,7 +55,7 @@ pub enum Location {
  * The core frame
  */
 
-pub struct Inner {
+struct Inner {
     parts: Parts,
     size: (u32, u32),
     resizable: bool,
