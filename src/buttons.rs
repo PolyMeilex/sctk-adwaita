@@ -1,5 +1,5 @@
 use smithay_client_toolkit::window::ButtonState;
-use tiny_skia::{FillRule, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 use crate::{
     theme::{ColorMap, BORDER_SIZE},
@@ -48,7 +48,7 @@ impl Button {
         scale: f32,
         colors: &ColorMap,
         mouses: &[Location],
-        pixmap: &mut Pixmap,
+        pixmap: &mut PixmapMut,
     ) {
         let btn_state = if mouses.contains(&Location::Button(ButtonKind::Minimize)) {
             ButtonState::Hovered
@@ -96,7 +96,7 @@ impl Button {
         colors: &ColorMap,
         mouses: &[Location],
         maximizable: bool,
-        pixmap: &mut Pixmap,
+        pixmap: &mut PixmapMut,
     ) {
         let btn_state = if !maximizable {
             ButtonState::Disabled
@@ -161,7 +161,7 @@ impl Button {
         scale: f32,
         colors: &ColorMap,
         mouses: &[Location],
-        pixmap: &mut Pixmap,
+        pixmap: &mut PixmapMut,
     ) {
         // Draw the close button
         let btn_state = if mouses

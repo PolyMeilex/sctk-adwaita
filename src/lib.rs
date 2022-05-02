@@ -9,7 +9,8 @@ use smithay_client_toolkit::reexports::client;
 use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
 use client::{Attached, DispatchData};
 use tiny_skia::{
-    ClipMask, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Point, Rect, Transform,
+    ClipMask, Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point,
+    Rect, Transform,
 };
 
 use smithay_client_toolkit::{
@@ -350,7 +351,9 @@ impl Frame for AdwaitaFrame {
                     4 * header_width as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    let mut pixmap = Pixmap::new(header_width, header_height).unwrap();
+                    let mut pixmap =
+                        PixmapMut::from_bytes(canvas, header_width, header_height).unwrap();
+                    pixmap.fill(Color::TRANSPARENT);
 
                     self.title_text.update_scale(header_scale);
 
@@ -376,12 +379,6 @@ impl Frame for AdwaitaFrame {
                             })
                             .collect::<Vec<Location>>(),
                     );
-
-                    let buff = pixmap.data();
-
-                    for (id, pixel) in canvas.iter_mut().enumerate() {
-                        *pixel = buff[id];
-                    }
 
                     decoration.header.subsurface.set_position(
                         -(BORDER_SIZE as i32),
@@ -421,7 +418,8 @@ impl Frame for AdwaitaFrame {
                     (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
                     let x = BORDER_SIZE as f32 * bottom_scale as f32 - 1.0;
@@ -437,11 +435,6 @@ impl Frame for AdwaitaFrame {
                         Transform::identity(),
                         None,
                     );
-
-                    let data = pixmap.data();
-                    for (id, pixel) in canvas.iter_mut().enumerate() {
-                        *pixel = data[id];
-                    }
 
                     decoration
                         .bottom
@@ -480,7 +473,8 @@ impl Frame for AdwaitaFrame {
                     let mut bg = Paint::default();
                     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
                     pixmap.fill_rect(
@@ -489,11 +483,6 @@ impl Frame for AdwaitaFrame {
                         Transform::identity(),
                         None,
                     );
-
-                    let data = pixmap.data();
-                    for (id, pixel) in canvas.iter_mut().enumerate() {
-                        *pixel = data[id];
-                    }
 
                     decoration
                         .left
@@ -527,7 +516,8 @@ impl Frame for AdwaitaFrame {
                     let mut bg = Paint::default();
                     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = Pixmap::new(w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
                     pixmap.fill_rect(
@@ -536,11 +526,6 @@ impl Frame for AdwaitaFrame {
                         Transform::identity(),
                         None,
                     );
-
-                    let data = pixmap.data();
-                    for (id, pixel) in canvas.iter_mut().enumerate() {
-                        *pixel = data[id];
-                    }
 
                     decoration.right.subsurface.set_position(width as i32, 0);
                     decoration.right.surface.attach(Some(&buffer), 0, 0);
@@ -605,7 +590,7 @@ impl Drop for AdwaitaFrame {
 }
 
 fn draw_headerbar(
-    pixmap: &mut Pixmap,
+    pixmap: &mut PixmapMut,
     text_pixmap: Option<&Pixmap>,
     scale: f32,
     maximizable: bool,
@@ -689,7 +674,7 @@ fn draw_headerbar(
 }
 
 fn draw_headerbar_bg(
-    pixmap: &mut Pixmap,
+    pixmap: &mut PixmapMut,
     scale: f32,
     margin_h: f32,
     margin_v: f32,
