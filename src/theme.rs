@@ -54,14 +54,6 @@ impl ColorMap {
             ..Default::default()
         }
     }
-
-    pub(crate) fn font_paint(&self) -> Paint {
-        Paint {
-            shader: Shader::SolidColor(self.font_color),
-            anti_alias: true,
-            ..Default::default()
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

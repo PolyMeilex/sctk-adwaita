@@ -14,4 +14,4 @@ smithay-client-toolkit = "0.15"
 tiny-skia = { version = "0.6.3", features = ["std", "simd"] }
 log = "0.4"
 
-ttf-parser = { version = "0.15", default-features = false, features = ["std"] }
+crossfont = "0.3.2"

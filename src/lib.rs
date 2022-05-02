@@ -8,7 +8,9 @@ use smithay_client_toolkit::reexports::client;
 
 use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
 use client::{Attached, DispatchData};
-use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, Point, Rect, Transform};
+use tiny_skia::{
+    ClipMask, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Point, Rect, Transform,
+};
 
 use smithay_client_toolkit::{
     seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer},
@@ -21,16 +23,14 @@ use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
 use buttons::{ButtonKind, Buttons};
+use title::TitleText;
 
 use crate::theme::ColorMap;
 
-mod font;
-mod minitype;
 mod parts;
 mod pointer;
 mod surface;
-
-const ROBOTO_FONT: &[u8] = include_bytes!("../assets/Roboto-Regular.ttf");
+mod title;
 
 /*
  * Utilities
@@ -158,8 +158,8 @@ pub struct AdwaitaFrame {
 
     buttons: Rc<RefCell<Buttons>>,
     colors: ColorTheme,
-    font: font::Font,
     title: Option<String>,
+    title_text: TitleText,
 }
 
 impl Frame for AdwaitaFrame {
@@ -194,6 +194,8 @@ impl Frame for AdwaitaFrame {
 
         let pool = AutoMemPool::new(shm.clone())?;
 
+        let colors = ColorTheme::default();
+
         Ok(AdwaitaFrame {
             base_surface: base_surface.clone(),
             compositor: compositor.clone(),
@@ -206,9 +208,9 @@ impl Frame for AdwaitaFrame {
             themer,
             surface_version: compositor.as_ref().version(),
             buttons: Default::default(),
-            colors: Default::default(),
-            font: font::Font::from_bytes(ROBOTO_FONT).unwrap(),
             title: None,
+            title_text: TitleText::new(colors.active.font_color).unwrap(),
+            colors,
         })
     }
 
@@ -336,6 +338,9 @@ impl Frame for AdwaitaFrame {
                 } else {
                     &self.colors.inactive
                 };
+
+                self.title_text.update_color(colors.font_color);
+
                 let border_paint = colors.border_paint();
 
                 // -> head-subsurface
@@ -347,14 +352,15 @@ impl Frame for AdwaitaFrame {
                 ) {
                     let mut pixmap = Pixmap::new(header_width, header_height).unwrap();
 
+                    self.title_text.update_scale(header_scale);
+
                     draw_headerbar(
                         &mut pixmap,
+                        self.title_text.pixmap(),
                         header_scale as f32,
                         inner.resizable,
                         self.active,
                         &self.colors,
-                        &self.font,
-                        self.title.as_ref(),
                         &self.buttons.borrow(),
                         &self
                             .pointers
@@ -377,10 +383,6 @@ impl Frame for AdwaitaFrame {
                         *pixel = buff[id];
                     }
 
-                    // decoration
-                    //     .header
-                    //     .subsurface
-                    //     .set_position(-(BORDER_SIZE as i32), -(HEADER_SIZE as i32));
                     decoration.header.subsurface.set_position(
                         -(BORDER_SIZE as i32),
                         -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
@@ -587,6 +589,7 @@ impl Frame for AdwaitaFrame {
     }
 
     fn set_title(&mut self, title: String) {
+        self.title_text.update_title(&title);
         self.title = Some(title);
     }
 }
@@ -603,12 +606,11 @@ impl Drop for AdwaitaFrame {
 
 fn draw_headerbar(
     pixmap: &mut Pixmap,
+    text_pixmap: Option<&Pixmap>,
     scale: f32,
     maximizable: bool,
     state: WindowState,
     colors: &ColorTheme,
-    font: &font::Font,
-    title: Option<&String>,
     buttons: &Buttons,
     mouses: &[Location],
 ) {
@@ -621,18 +623,15 @@ fn draw_headerbar(
 
     draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors);
 
-    if let Some(title) = title {
-        let size = 20.0 * scale as f64;
-
+    if let Some(text_pixmap) = text_pixmap {
         let canvas_w = pixmap.width() as f32;
         let canvas_h = pixmap.height() as f32;
 
         let header_w = canvas_w - margin_h * 2.0;
         let header_h = canvas_h - margin_v;
 
-        let (w, h) = font.measure_text(title, size);
-        let text_w = w as f32;
-        let text_h = h as f32;
+        let text_w = text_pixmap.width() as f32;
+        let text_h = text_pixmap.height() as f32;
 
         let x = header_w / 2.0 - text_w / 2.0;
         let y = header_h / 2.0 - text_h / 2.0;
@@ -652,14 +651,24 @@ fn draw_headerbar(
 
         let x = x.max(margin_h + 5.0);
 
-        font.render_text(
-            size,
-            &colors.font_paint(),
-            pixmap,
-            (x as f64, y as f64),
-            title,
-            buttons.minimize.x() as f64 - 10.0,
-        );
+        if let Some(clip) = Rect::from_xywh(0.0, 0.0, buttons.minimize.x() - 10.0, header_h) {
+            let mut mask = ClipMask::new();
+            mask.set_path(
+                canvas_w as u32,
+                canvas_h as u32,
+                &PathBuilder::from_rect(clip),
+                FillRule::Winding,
+                false,
+            );
+            pixmap.draw_pixmap(
+                x as i32,
+                y as i32,
+                text_pixmap.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                Some(&mask),
+            );
+        }
     }
 
     if buttons.close.x() > margin_h {
