@@ -115,12 +115,15 @@ impl TitleText {
             .title
             .chars()
             .filter_map(|character| {
+                let key = GlyphKey {
+                    character,
+                    font_key: self.font_key,
+                    size: self.size,
+                };
+
                 self.rasterizer
-                    .get_glyph(GlyphKey {
-                        character,
-                        font_key: self.font_key,
-                        size: self.size,
-                    })
+                    .get_glyph(key)
+                    .map(|glyph| (key, glyph))
                     .ok()
             })
             .collect();
@@ -130,7 +133,9 @@ impl TitleText {
             return;
         }
 
-        let width = glyphs.iter().fold(0, |w, g| w + (g.left + g.width).max(5));
+        let width = glyphs
+            .iter()
+            .fold(0, |w, (_, g)| w + (g.left + g.width).max(5));
         let height = self.metrics.line_height.round() as i32;
 
         let mut pixmap = if let Some(p) = Pixmap::new(width as u32, height as u32) {
@@ -141,8 +146,10 @@ impl TitleText {
         };
         // pixmap.fill(Color::from_rgba8(255, 0, 0, 55));
 
-        let mut x = 0;
-        for glyph in glyphs {
+        let mut caret = 0;
+        let mut last_glyph = None;
+
+        for (key, glyph) in glyphs {
             let mut buffer = Vec::with_capacity(glyph.width as usize * 4);
 
             let glyph_buffer = match &glyph.buffer {
@@ -170,29 +177,27 @@ impl TitleText {
                 buffer.push(color.alpha());
             }
 
-            x += glyph.left;
+            if let Some(last) = last_glyph {
+                let (x, _) = self.rasterizer.kerning(last, key);
+                caret += x as i32;
+            }
 
             if let Some(pixmap_glyph) =
                 PixmapRef::from_bytes(&buffer, glyph.width as _, glyph.height as _)
             {
                 pixmap.draw_pixmap(
-                    x,
+                    glyph.left + caret,
                     height - glyph.top + self.metrics.descent.round() as i32,
                     pixmap_glyph,
                     &PixmapPaint::default(),
                     Transform::identity(),
                     None,
                 );
-            } else {
-                // This is a hack, for white spaces
-                // Obviously `advance_width` should be used here,
-                // but crossfont assumes monospace everywhere so here we are
-                // adding left, width and 5 to emulate advance width
-                // ¯\_(ツ)_/¯
-                x += 5;
             }
 
-            x += glyph.width;
+            caret += glyph.advance.0;
+
+            last_glyph = Some(key);
         }
 
         self.pixmap = Some(pixmap);
