@@ -371,6 +371,7 @@ impl Frame for AdwaitaFrame {
                         None,
                         header_scale as f32,
                         inner.resizable,
+                        inner.maximized,
                         self.active,
                         &self.colors,
                         &self.buttons.borrow(),
@@ -604,6 +605,7 @@ fn draw_headerbar(
     text_pixmap: Option<&Pixmap>,
     scale: f32,
     maximizable: bool,
+    is_maximized: bool,
     state: WindowState,
     colors: &ColorTheme,
     buttons: &Buttons,
@@ -673,7 +675,7 @@ fn draw_headerbar(
     if buttons.maximize.x() > margin_h {
         buttons
             .maximize
-            .draw_maximize(scale, colors, mouses, maximizable, pixmap);
+            .draw_maximize(scale, colors, mouses, maximizable, is_maximized, pixmap);
     }
 
     if buttons.minimize.x() > margin_h {

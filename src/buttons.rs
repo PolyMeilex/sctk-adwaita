@@ -96,6 +96,7 @@ impl Button {
         colors: &ColorMap,
         mouses: &[Location],
         maximizable: bool,
+        is_maximized: bool,
         pixmap: &mut PixmapMut,
     ) {
         let btn_state = if !maximizable {
@@ -138,7 +139,19 @@ impl Button {
             let size = 8.0 * scale as f32;
             let hsize = size / 2.0;
             let mut pb = PathBuilder::new();
-            pb.push_rect(x - hsize, y - hsize, size, size);
+
+            let x = x - hsize;
+            let y = y - hsize;
+            pb.push_rect(x, y, size, size);
+
+            if is_maximized {
+                if let Some(rect) = Rect::from_xywh(x + 2.0, y - 2.0, size, size) {
+                    pb.move_to(rect.left(), rect.top());
+                    pb.line_to(rect.right(), rect.top());
+                    pb.line_to(rect.right(), rect.bottom());
+                }
+            }
+
             pb.finish().unwrap()
         };
 
