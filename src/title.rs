@@ -1,4 +1,4 @@
-use crossfont::{GlyphKey, Rasterize};
+use crossfont::{GlyphKey, Rasterize, RasterizedGlyph};
 use tiny_skia::{Color, Pixmap, PixmapPaint, PixmapRef, Transform};
 
 pub struct TitleText {
@@ -133,9 +133,7 @@ impl TitleText {
             return;
         }
 
-        let width = glyphs
-            .iter()
-            .fold(0, |w, (_, g)| w + (g.left + g.width).max(5));
+        let width = self.calc_width(&glyphs);
         let height = self.metrics.line_height.round() as i32;
 
         let mut pixmap = if let Some(p) = Pixmap::new(width as u32, height as u32) {
@@ -205,5 +203,23 @@ impl TitleText {
 
     pub fn pixmap(&self) -> Option<&Pixmap> {
         self.pixmap.as_ref()
+    }
+
+    fn calc_width(&mut self, glyphs: &[(GlyphKey, RasterizedGlyph)]) -> i32 {
+        let mut caret = 0;
+        let mut last_glyph: Option<&GlyphKey> = None;
+
+        for (key, glyph) in glyphs.iter() {
+            if let Some(last) = last_glyph {
+                let (x, _) = self.rasterizer.kerning(*last, *key);
+                caret += x as i32;
+            }
+
+            caret += glyph.advance.0;
+
+            last_glyph = Some(key);
+        }
+
+        caret
     }
 }
