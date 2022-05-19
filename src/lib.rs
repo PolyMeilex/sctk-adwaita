@@ -30,9 +30,8 @@ use crate::theme::ColorMap;
 mod parts;
 mod pointer;
 mod surface;
-#[cfg(feature = "title")]
+
 mod title;
-#[cfg(feature = "title")]
 use title::TitleText;
 
 /*
@@ -162,7 +161,6 @@ pub struct AdwaitaFrame {
     buttons: Rc<RefCell<Buttons>>,
     colors: ColorTheme,
     title: Option<String>,
-    #[cfg(feature = "title")]
     title_text: TitleText,
 }
 
@@ -213,7 +211,6 @@ impl Frame for AdwaitaFrame {
             surface_version: compositor.as_ref().version(),
             buttons: Default::default(),
             title: None,
-            #[cfg(feature = "title")]
             title_text: TitleText::new(colors.active.font_color).unwrap(),
             colors,
         })
@@ -344,7 +341,6 @@ impl Frame for AdwaitaFrame {
                     &self.colors.inactive
                 };
 
-                #[cfg(feature = "title")]
                 self.title_text.update_color(colors.font_color);
 
                 let border_paint = colors.border_paint();
@@ -360,15 +356,11 @@ impl Frame for AdwaitaFrame {
                         PixmapMut::from_bytes(canvas, header_width, header_height).unwrap();
                     pixmap.fill(Color::TRANSPARENT);
 
-                    #[cfg(feature = "title")]
                     self.title_text.update_scale(header_scale);
 
                     draw_headerbar(
                         &mut pixmap,
-                        #[cfg(feature = "title")]
                         self.title_text.pixmap(),
-                        #[cfg(not(feature = "title"))]
-                        None,
                         header_scale as f32,
                         inner.resizable,
                         inner.maximized,
@@ -584,7 +576,6 @@ impl Frame for AdwaitaFrame {
     }
 
     fn set_title(&mut self, title: String) {
-        #[cfg(feature = "title")]
         self.title_text.update_title(&title);
         self.title = Some(title);
     }
