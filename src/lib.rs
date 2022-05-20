@@ -34,6 +34,8 @@ mod surface;
 mod title;
 use title::TitleText;
 
+type SkiaResult = Option<()>;
+
 /*
  * Utilities
  */
@@ -161,7 +163,7 @@ pub struct AdwaitaFrame {
     buttons: Rc<RefCell<Buttons>>,
     colors: ColorTheme,
     title: Option<String>,
-    title_text: TitleText,
+    title_text: Option<TitleText>,
 }
 
 impl Frame for AdwaitaFrame {
@@ -211,7 +213,7 @@ impl Frame for AdwaitaFrame {
             surface_version: compositor.as_ref().version(),
             buttons: Default::default(),
             title: None,
-            title_text: TitleText::new(colors.active.font_color).unwrap(),
+            title_text: TitleText::new(colors.active.font_color),
             colors,
         })
     }
@@ -223,10 +225,15 @@ impl Frame for AdwaitaFrame {
         let pointer = self.themer.theme_pointer_with_impl(
             seat,
             move |event, pointer: ThemedPointer, ddata: DispatchData| {
-                let data: &RefCell<PointerUserData> = pointer.as_ref().user_data().get().unwrap();
-                let mut data = data.borrow_mut();
-                let mut inner = inner.borrow_mut();
-                data.event(event, &mut inner, &buttons.borrow(), &pointer, ddata);
+                if let Some(data) = pointer
+                    .as_ref()
+                    .user_data()
+                    .get::<RefCell<PointerUserData>>()
+                {
+                    let mut data = data.borrow_mut();
+                    let mut inner = inner.borrow_mut();
+                    data.event(event, &mut inner, &buttons.borrow(), &pointer, ddata);
+                }
             },
         );
         pointer
@@ -238,18 +245,20 @@ impl Frame for AdwaitaFrame {
 
     fn remove_seat(&mut self, seat: &wl_seat::WlSeat) {
         self.pointers.retain(|pointer| {
-            let user_data = pointer
+            pointer
                 .as_ref()
                 .user_data()
                 .get::<RefCell<PointerUserData>>()
-                .unwrap();
-            let guard = user_data.borrow_mut();
-            if &guard.seat == seat {
-                pointer.release();
-                false
-            } else {
-                true
-            }
+                .map(|user_data| {
+                    let guard = user_data.borrow_mut();
+                    if &guard.seat == seat {
+                        pointer.release();
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .unwrap_or(false)
         });
     }
 
@@ -306,12 +315,54 @@ impl Frame for AdwaitaFrame {
     }
 
     fn redraw(&mut self) {
+        self.redraw_inner();
+    }
+
+    fn subtract_borders(&self, width: i32, height: i32) -> (i32, i32) {
+        if self.hidden || self.inner.borrow().fullscreened {
+            (width, height)
+        } else {
+            (width, height - HEADER_SIZE as i32)
+        }
+    }
+
+    fn add_borders(&self, width: i32, height: i32) -> (i32, i32) {
+        if self.hidden || self.inner.borrow().fullscreened {
+            (width, height)
+        } else {
+            (width, height + HEADER_SIZE as i32)
+        }
+    }
+
+    fn location(&self) -> (i32, i32) {
+        if self.hidden || self.inner.borrow().fullscreened {
+            (0, 0)
+        } else {
+            (0, -(HEADER_SIZE as i32))
+        }
+    }
+
+    fn set_config(&mut self, config: FrameConfig) {
+        self.colors = config.theme;
+    }
+
+    fn set_title(&mut self, title: String) {
+        if let Some(title_text) = self.title_text.as_mut() {
+            title_text.update_title(&title);
+        }
+
+        self.title = Some(title);
+    }
+}
+
+impl AdwaitaFrame {
+    fn redraw_inner(&mut self) -> SkiaResult {
         let inner = self.inner.borrow_mut();
 
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.hidden || inner.fullscreened {
             inner.parts.hide_decorations();
-            return;
+            return Some(());
         }
 
         // `parts` can't be empty here, since the initial state for `self.hidden` is true, and
@@ -341,7 +392,9 @@ impl Frame for AdwaitaFrame {
                     &self.colors.inactive
                 };
 
-                self.title_text.update_color(colors.font_color);
+                if let Some(title_text) = self.title_text.as_mut() {
+                    title_text.update_color(colors.font_color);
+                }
 
                 let border_paint = colors.border_paint();
 
@@ -352,15 +405,16 @@ impl Frame for AdwaitaFrame {
                     4 * header_width as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    let mut pixmap =
-                        PixmapMut::from_bytes(canvas, header_width, header_height).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, header_width, header_height)?;
                     pixmap.fill(Color::TRANSPARENT);
 
-                    self.title_text.update_scale(header_scale);
+                    if let Some(title_text) = self.title_text.as_mut() {
+                        title_text.update_scale(header_scale);
+                    }
 
                     draw_headerbar(
                         &mut pixmap,
-                        self.title_text.pixmap(),
+                        self.title_text.as_ref().map(|t| t.pixmap()).unwrap_or(None),
                         header_scale as f32,
                         inner.resizable,
                         inner.maximized,
@@ -373,7 +427,7 @@ impl Frame for AdwaitaFrame {
                             .flat_map(|p| {
                                 if p.as_ref().is_alive() {
                                     let data: &RefCell<PointerUserData> =
-                                        p.as_ref().user_data().get().unwrap();
+                                        p.as_ref().user_data().get()?;
                                     Some(data.borrow().location)
                                 } else {
                                     None
@@ -408,7 +462,7 @@ impl Frame for AdwaitaFrame {
                 if inner.maximized {
                     // Don't draw the borders.
                     decoration.hide_borders();
-                    return;
+                    return Some(());
                 }
 
                 let w = ((width + 2 * BORDER_SIZE) * bottom_scale) as i32;
@@ -420,7 +474,7 @@ impl Frame for AdwaitaFrame {
                     (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
                     pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
@@ -431,8 +485,7 @@ impl Frame for AdwaitaFrame {
                             0.0,
                             w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0,
                             size,
-                        )
-                        .unwrap(),
+                        )?,
                         &border_paint,
                         Transform::identity(),
                         None,
@@ -475,12 +528,12 @@ impl Frame for AdwaitaFrame {
                     let mut bg = Paint::default();
                     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
                     pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
                     pixmap.fill_rect(
-                        Rect::from_xywh(w as f32 - size, 0.0, w as f32, h as f32).unwrap(),
+                        Rect::from_xywh(w as f32 - size, 0.0, w as f32, h as f32)?,
                         &border_paint,
                         Transform::identity(),
                         None,
@@ -518,12 +571,12 @@ impl Frame for AdwaitaFrame {
                     let mut bg = Paint::default();
                     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32).unwrap();
+                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
                     pixmap.fill(Color::TRANSPARENT);
 
                     let size = 1.0;
                     pixmap.fill_rect(
-                        Rect::from_xywh(0.0, 0.0, size, h as f32).unwrap(),
+                        Rect::from_xywh(0.0, 0.0, size, h as f32)?,
                         &border_paint,
                         Transform::identity(),
                         None,
@@ -545,39 +598,8 @@ impl Frame for AdwaitaFrame {
                 }
             }
         }
-    }
 
-    fn subtract_borders(&self, width: i32, height: i32) -> (i32, i32) {
-        if self.hidden || self.inner.borrow().fullscreened {
-            (width, height)
-        } else {
-            (width, height - HEADER_SIZE as i32)
-        }
-    }
-
-    fn add_borders(&self, width: i32, height: i32) -> (i32, i32) {
-        if self.hidden || self.inner.borrow().fullscreened {
-            (width, height)
-        } else {
-            (width, height + HEADER_SIZE as i32)
-        }
-    }
-
-    fn location(&self) -> (i32, i32) {
-        if self.hidden || self.inner.borrow().fullscreened {
-            (0, 0)
-        } else {
-            (0, -(HEADER_SIZE as i32))
-        }
-    }
-
-    fn set_config(&mut self, config: FrameConfig) {
-        self.colors = config.theme;
-    }
-
-    fn set_title(&mut self, title: String) {
-        self.title_text.update_title(&title);
-        self.title = Some(title);
+        Some(())
     }
 }
 
@@ -682,7 +704,7 @@ fn draw_headerbar_bg(
     margin_h: f32,
     margin_v: f32,
     colors: &ColorMap,
-) {
+) -> SkiaResult {
     let w = pixmap.width() as f32;
     let h = pixmap.height() as f32;
 
@@ -691,7 +713,7 @@ fn draw_headerbar_bg(
     let margin_h = margin_h - 1.0;
     let w = w - margin_h * 2.0;
 
-    let bg = rounded_headerbar_shape(margin_h, margin_v, w, h, radius).unwrap();
+    let bg = rounded_headerbar_shape(margin_h, margin_v, w, h, radius)?;
 
     pixmap.fill_path(
         &bg,
@@ -702,11 +724,13 @@ fn draw_headerbar_bg(
     );
 
     pixmap.fill_rect(
-        Rect::from_xywh(margin_h, h - 1.0, w, h).unwrap(),
+        Rect::from_xywh(margin_h, h - 1.0, w, h)?,
         &colors.border_paint(),
         Transform::identity(),
         None,
     );
+
+    Some(())
 }
 
 fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Option<Path> {

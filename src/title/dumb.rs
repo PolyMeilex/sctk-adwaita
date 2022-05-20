@@ -4,10 +4,6 @@ use tiny_skia::{Color, Pixmap};
 pub struct DumbTitleText {}
 
 impl DumbTitleText {
-    pub fn new(_color: Color) -> Self {
-        Self {}
-    }
-
     pub fn update_scale(&mut self, _scale: u32) {}
 
     pub fn update_title<S: Into<String>>(&mut self, _title: S) {}

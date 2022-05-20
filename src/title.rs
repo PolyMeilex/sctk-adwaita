@@ -22,9 +22,10 @@ impl TitleText {
             .map(|imp| Self { imp });
 
         #[cfg(not(feature = "crossfont"))]
-        return Some(Self {
-            imp: dumb::DumbTitleText::new(color),
-        });
+        {
+            let _ = color;
+            return None;
+        }
     }
 
     pub fn update_scale(&mut self, scale: u32) {

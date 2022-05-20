@@ -3,7 +3,7 @@ use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 use crate::{
     theme::{ColorMap, BORDER_SIZE},
-    Location,
+    Location, SkiaResult,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -49,7 +49,7 @@ impl Button {
         colors: &ColorMap,
         mouses: &[Location],
         pixmap: &mut PixmapMut,
-    ) {
+    ) -> SkiaResult {
         let btn_state = if mouses.contains(&Location::Button(ButtonKind::Minimize)) {
             ButtonState::Hovered
         } else {
@@ -61,7 +61,7 @@ impl Button {
         let x = self.center_x();
         let y = self.center_y();
 
-        let circle = PathBuilder::from_circle(x, y, radius).unwrap();
+        let circle = PathBuilder::from_circle(x, y, radius)?;
 
         let button_bg = if btn_state == ButtonState::Hovered {
             colors.button_hover_paint()
@@ -83,11 +83,13 @@ impl Button {
         let len = 8.0 * scale;
         let hlen = len / 2.0;
         pixmap.fill_rect(
-            Rect::from_xywh(x - hlen, y + hlen, len, 1.0 * scale).unwrap(),
+            Rect::from_xywh(x - hlen, y + hlen, len, 1.0 * scale)?,
             &button_icon_paint,
             Transform::identity(),
             None,
         );
+
+        Some(())
     }
 
     pub fn draw_maximize(
@@ -98,7 +100,7 @@ impl Button {
         maximizable: bool,
         is_maximized: bool,
         pixmap: &mut PixmapMut,
-    ) {
+    ) -> SkiaResult {
         let btn_state = if !maximizable {
             ButtonState::Disabled
         } else if mouses
@@ -118,7 +120,7 @@ impl Button {
         let path1 = {
             let mut pb = PathBuilder::new();
             pb.push_circle(x, y, radius);
-            pb.finish().unwrap()
+            pb.finish()?
         };
 
         let button_bg = if btn_state == ButtonState::Hovered {
@@ -152,7 +154,7 @@ impl Button {
                 }
             }
 
-            pb.finish().unwrap()
+            pb.finish()?
         };
 
         let mut button_icon_paint = colors.button_icon_paint();
@@ -167,6 +169,8 @@ impl Button {
             Transform::identity(),
             None,
         );
+
+        Some(())
     }
 
     pub fn draw_close(
@@ -175,7 +179,7 @@ impl Button {
         colors: &ColorMap,
         mouses: &[Location],
         pixmap: &mut PixmapMut,
-    ) {
+    ) -> SkiaResult {
         // Draw the close button
         let btn_state = if mouses
             .iter()
@@ -194,7 +198,7 @@ impl Button {
         let path1 = {
             let mut pb = PathBuilder::new();
             pb.push_circle(x, y, radius);
-            pb.finish().unwrap()
+            pb.finish()?
         };
 
         let button_bg = if btn_state == ButtonState::Hovered {
@@ -237,7 +241,7 @@ impl Button {
                 pb.close();
             }
 
-            pb.finish().unwrap()
+            pb.finish()?
         };
 
         let mut button_icon_paint = colors.button_icon_paint();
@@ -252,6 +256,8 @@ impl Button {
             Transform::identity(),
             None,
         );
+
+        Some(())
     }
 }
 
