@@ -25,6 +25,7 @@ pub(crate) struct PointerUserData {
 
     pub position: (f64, f64),
     pub seat: WlSeat,
+    pub last_click: Option<std::time::Instant>,
 }
 
 impl PointerUserData {
@@ -34,6 +35,7 @@ impl PointerUserData {
             current_surface: DecorationPartKind::None,
             position: (0.0, 0.0),
             seat,
+            last_click: None,
         }
     }
 
@@ -121,11 +123,11 @@ impl PointerUserData {
 }
 
 fn request_for_location_on_lmb(
-    pointer_data: &PointerUserData,
+    pointer_data: &mut PointerUserData,
     maximized: bool,
     resizable: bool,
 ) -> Option<FrameRequest> {
-    match pointer_data.location {
+    let req = match pointer_data.location {
         Location::Top if resizable => Some(FrameRequest::Resize(
             pointer_data.seat.clone(),
             ResizeEdge::Top,
@@ -158,7 +160,21 @@ fn request_for_location_on_lmb(
             pointer_data.seat.clone(),
             ResizeEdge::TopRight,
         )),
-        Location::Head => Some(FrameRequest::Move(pointer_data.seat.clone())),
+        Location::Head => {
+            if let Some(last) = pointer_data.last_click {
+                if last.elapsed() < std::time::Duration::from_millis(1000) {
+                    if maximized {
+                        Some(FrameRequest::UnMaximize)
+                    } else {
+                        Some(FrameRequest::Maximize)
+                    }
+                } else {
+                    Some(FrameRequest::Move(pointer_data.seat.clone()))
+                }
+            } else {
+                Some(FrameRequest::Move(pointer_data.seat.clone()))
+            }
+        }
         Location::Button(ButtonKind::Close) => Some(FrameRequest::Close),
         Location::Button(ButtonKind::Maximize) => {
             if maximized {
@@ -169,7 +185,11 @@ fn request_for_location_on_lmb(
         }
         Location::Button(ButtonKind::Minimize) => Some(FrameRequest::Minimize),
         _ => None,
-    }
+    };
+
+    pointer_data.last_click = Some(std::time::Instant::now());
+
+    req
 }
 
 fn request_for_location_on_rmb(pointer_data: &PointerUserData) -> Option<FrameRequest> {
