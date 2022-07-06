@@ -1,9 +1,9 @@
 use smithay_client_toolkit::window::WindowState;
 
 pub use tiny_skia::Color;
-use tiny_skia::{Paint, Shader};
+use tiny_skia::{GradientStop, LinearGradient, Paint, Point, Shader, SpreadMode, Transform};
 
-pub(crate) const BORDER_SIZE: u32 = 10;
+pub(crate) const BORDER_SIZE: u32 = 20;
 pub(crate) const HEADER_SIZE: u32 = 35;
 
 #[derive(Debug, Clone)]
@@ -54,6 +54,45 @@ impl ColorMap {
             ..Default::default()
         }
     }
+
+    pub(crate) fn border_gradient(&self, pos: GradientPostion) -> Paint {
+        let h = BORDER_SIZE;
+        let (start_x, start_y, stop_x, stop_y) = match pos {
+            GradientPostion::LEFT => (h, 0, 0, 0),
+            GradientPostion::TOP => (0, h, 0, 0),
+            GradientPostion::RIGHT => (0, 0, h, 0),
+            GradientPostion::BOTTOM => (0, 0, 0, h),
+        };
+        let shadow = LinearGradient::new(
+            Point {
+                x: start_x as f32,
+                y: start_y as f32,
+            },
+            Point {
+                x: stop_x as f32,
+                y: stop_y as f32,
+            },
+            vec![
+                GradientStop::new(0.0, Color::from_rgba(0.0, 0.0, 0.0, 0.3).unwrap()),
+                GradientStop::new(1.0, Color::TRANSPARENT),
+            ],
+            SpreadMode::Repeat,
+            Transform::identity(),
+        )
+        .unwrap();
+
+        Paint {
+            shader: shadow,
+            ..Default::default()
+        }
+    }
+}
+
+pub enum GradientPostion {
+    LEFT,
+    TOP,
+    RIGHT,
+    BOTTOM,
 }
 
 #[derive(Debug, Clone)]

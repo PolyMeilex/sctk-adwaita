@@ -20,7 +20,7 @@ use smithay_client_toolkit::{
 };
 
 pub mod theme;
-use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
+use theme::{ColorTheme, GradientPostion, BORDER_SIZE, HEADER_SIZE};
 
 mod buttons;
 use buttons::{ButtonKind, Buttons};
@@ -407,6 +407,18 @@ impl AdwaitaFrame {
                 ) {
                     let mut pixmap = PixmapMut::from_bytes(canvas, header_width, header_height)?;
                     pixmap.fill(Color::TRANSPARENT);
+                    // FIXME: Almost works
+                    pixmap.fill_rect(
+                        Rect::from_xywh(
+                            BORDER_SIZE as f32,
+                            0.0,
+                            (header_width - BORDER_SIZE * 2) as f32,
+                            BORDER_SIZE as f32,
+                        )?,
+                        &colors.border_gradient(GradientPostion::TOP),
+                        Transform::identity(),
+                        None,
+                    );
 
                     if let Some(title_text) = self.title_text.as_mut() {
                         title_text.update_scale(header_scale);
@@ -479,14 +491,16 @@ impl AdwaitaFrame {
 
                     let size = 1.0;
                     let x = BORDER_SIZE as f32 * bottom_scale as f32 - 1.0;
+                    let y = w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0;
                     pixmap.fill_rect(
-                        Rect::from_xywh(
-                            x,
-                            0.0,
-                            w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0,
-                            size,
-                        )?,
+                        Rect::from_xywh(x, 0.0, y, size)?,
                         &border_paint,
+                        Transform::identity(),
+                        None,
+                    );
+                    pixmap.fill_rect(
+                        Rect::from_xywh(x, 0.0, y, BORDER_SIZE as f32)?,
+                        &colors.border_gradient(GradientPostion::BOTTOM),
                         Transform::identity(),
                         None,
                     );
@@ -538,6 +552,12 @@ impl AdwaitaFrame {
                         Transform::identity(),
                         None,
                     );
+                    pixmap.fill_rect(
+                        Rect::from_xywh(0.0, 0.0, BORDER_SIZE as f32, h as f32)?,
+                        &colors.border_gradient(GradientPostion::LEFT),
+                        Transform::identity(),
+                        None,
+                    );
 
                     decoration
                         .left
@@ -578,6 +598,12 @@ impl AdwaitaFrame {
                     pixmap.fill_rect(
                         Rect::from_xywh(0.0, 0.0, size, h as f32)?,
                         &border_paint,
+                        Transform::identity(),
+                        None,
+                    );
+                    pixmap.fill_rect(
+                        Rect::from_xywh(0.0, 0.0, BORDER_SIZE as f32, h as f32)?,
+                        &colors.border_gradient(GradientPostion::RIGHT),
                         Transform::identity(),
                         None,
                     );
