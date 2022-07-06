@@ -40,7 +40,7 @@ fn main() {
         .expect("Failed to create a window !");
 
     window.set_title("/usr/lib/xorg/modules/input".to_string());
-    window.set_frame_config(sctk_adwaita::FrameConfig::light());
+    window.set_frame_config(sctk_adwaita::FrameConfig::dark());
 
     let mut pool = env
         .create_auto_pool()
@@ -99,9 +99,9 @@ fn redraw(
     )?;
 
     for pixel in canvas.chunks_exact_mut(4) {
-        pixel[0] = 255;
-        pixel[1] = 255;
-        pixel[2] = 255;
+        pixel[0] = 23;
+        pixel[1] = 23;
+        pixel[2] = 23;
         pixel[3] = 255;
     }
 
