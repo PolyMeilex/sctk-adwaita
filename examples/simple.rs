@@ -99,9 +99,9 @@ fn redraw(
     )?;
 
     for pixel in canvas.chunks_exact_mut(4) {
-        pixel[0] = 23;
-        pixel[1] = 23;
-        pixel[2] = 23;
+        pixel[0] = 33;
+        pixel[1] = 33;
+        pixel[2] = 33;
         pixel[3] = 255;
     }
 

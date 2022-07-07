@@ -370,15 +370,20 @@ impl AdwaitaFrame {
         let parts = &inner.parts;
 
         let (width, height) = inner.size;
+        println!("Window w, h: {:#?}, {:#?}", width, height);
 
         if let Some(decoration) = parts.decoration() {
             // Use header scale for all the thing.
             let header_scale = decoration.header.scale();
             self.buttons.borrow_mut().update_scale(header_scale);
 
+            println!("Header scale = {:?}", header_scale);
+
             let left_scale = decoration.left.scale();
             let right_scale = decoration.right.scale();
             let bottom_scale = decoration.bottom.scale();
+
+            let border_size_scaled = (BORDER_SIZE * header_scale) as f32;
 
             let (header_width, header_height) = self.buttons.borrow().scaled_size();
             let header_height = header_height + BORDER_SIZE * header_scale;
@@ -407,18 +412,45 @@ impl AdwaitaFrame {
                 ) {
                     let mut pixmap = PixmapMut::from_bytes(canvas, header_width, header_height)?;
                     pixmap.fill(Color::TRANSPARENT);
-                    // FIXME: Almost works
+                    // Draw top gradient {{{
+                    let gradient_x = border_size_scaled * 2.0;
+                    let gradient_height = border_size_scaled;
                     pixmap.fill_rect(
                         Rect::from_xywh(
-                            BORDER_SIZE as f32,
+                            gradient_x,
                             0.0,
-                            (header_width - BORDER_SIZE * 2) as f32,
-                            BORDER_SIZE as f32,
+                            header_width as f32 - gradient_x * 2.0,
+                            gradient_height,
                         )?,
                         &colors.border_gradient(GradientPostion::TOP),
                         Transform::identity(),
                         None,
                     );
+
+                    // Draw rounded shadow at left corner
+                    let shadow_start = 0.0;
+                    let shadow_end = border_size_scaled * 2.0 + shadow_start;
+                    let shadow_r =
+                        Rect::from_xywh(shadow_start, shadow_start, shadow_end, shadow_end)?;
+                    pixmap.fill_rect(
+                        shadow_r,
+                        &colors.radial_gradient(shadow_r),
+                        Transform::identity(),
+                        None,
+                    );
+                    // Draw other gradient part at the left side of the header decorations.
+                    pixmap.fill_rect(
+                        Rect::from_xywh(
+                            0.0,
+                            shadow_end,
+                            shadow_end + border_size_scaled,
+                            shadow_end + border_size_scaled,
+                        )?,
+                        &colors.border_gradient(GradientPostion::LEFT),
+                        Transform::identity(),
+                        None,
+                    );
+                    // }}}
 
                     if let Some(title_text) = self.title_text.as_mut() {
                         title_text.update_scale(header_scale);

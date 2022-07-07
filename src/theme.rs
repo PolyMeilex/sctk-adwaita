@@ -1,9 +1,11 @@
 use smithay_client_toolkit::window::WindowState;
 
 pub use tiny_skia::Color;
-use tiny_skia::{GradientStop, LinearGradient, Paint, Point, Shader, SpreadMode, Transform};
+use tiny_skia::{
+    GradientStop, LinearGradient, Paint, Point, RadialGradient, Rect, Shader, SpreadMode, Transform,
+};
 
-pub(crate) const BORDER_SIZE: u32 = 20;
+pub(crate) const BORDER_SIZE: u32 = 10;
 pub(crate) const HEADER_SIZE: u32 = 35;
 
 #[derive(Debug, Clone)]
@@ -73,10 +75,36 @@ impl ColorMap {
                 y: stop_y as f32,
             },
             vec![
-                GradientStop::new(0.0, Color::from_rgba(0.0, 0.0, 0.0, 0.3).unwrap()),
+                GradientStop::new(0.0, Color::from_rgba8(0, 0, 0, 35)),
+                GradientStop::new(0.3, Color::from_rgba8(0, 0, 0, 15)),
                 GradientStop::new(1.0, Color::TRANSPARENT),
             ],
             SpreadMode::Repeat,
+            Transform::identity(),
+        )
+        .unwrap();
+
+        Paint {
+            shader: shadow,
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn radial_gradient(&self, r: Rect) -> Paint {
+        let x = r.x() + r.width();
+        let y = r.x() + r.height() - r.y();
+        let radius = r.height();
+        println!("{:?}", r);
+        println!("Coords: {}, {}", x, y);
+        let shadow = RadialGradient::new(
+            Point { x, y },
+            Point { x, y },
+            radius,
+            vec![
+                GradientStop::new(0.0, Color::from_rgba8(0, 0, 0, 75)),
+                GradientStop::new(1.0, Color::TRANSPARENT),
+            ],
+            SpreadMode::Pad,
             Transform::identity(),
         )
         .unwrap();
@@ -136,7 +164,7 @@ impl ColorTheme {
                 button_idle: Color::from_rgba8(69, 69, 69, 255),
                 button_hover: Color::from_rgba8(79, 79, 79, 255),
                 button_icon: Color::from_rgba8(255, 255, 255, 255),
-                border_color: Color::from_rgba8(58, 58, 58, 255),
+                border_color: Color::from_rgba8(15, 17, 17, 255),
                 font_color: Color::from_rgba8(255, 255, 255, 255),
             },
             inactive: ColorMap {
@@ -144,7 +172,7 @@ impl ColorTheme {
                 button_idle: Color::from_rgba8(47, 47, 47, 255),
                 button_hover: Color::from_rgba8(57, 57, 57, 255),
                 button_icon: Color::from_rgba8(144, 144, 144, 255),
-                border_color: Color::from_rgba8(58, 58, 58, 255),
+                border_color: Color::from_rgba8(15, 17, 17, 255),
                 font_color: Color::from_rgba8(144, 144, 144, 255),
             },
         }
