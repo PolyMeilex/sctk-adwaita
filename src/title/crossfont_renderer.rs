@@ -42,7 +42,7 @@ impl CrossfontTitleText {
             },
         );
 
-        let mut rasterizer = crossfont::Rasterizer::new(scale as f32, false)?;
+        let mut rasterizer = crossfont::Rasterizer::new(scale as f32)?;
         let size = crossfont::Size::new(10.0);
         let font_key = rasterizer.load_font(&font_desc, size)?;
 
