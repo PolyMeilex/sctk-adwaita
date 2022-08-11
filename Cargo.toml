@@ -11,7 +11,7 @@ description = "Adwaita-like SCTK Frame"
 
 [dependencies]
 smithay-client-toolkit = "0.16"
-tiny-skia = { version = "0.6.3", features = ["std", "simd"] }
+tiny-skia = { version = "0.7.0", features = ["std", "simd"] }
 log = "0.4"
 
 crossfont = { version = "0.5.0", features = ["force_system_fontconfig"], optional = true }
