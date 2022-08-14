@@ -64,12 +64,8 @@ impl AbGlyphTitleText {
         let font = self.font.as_scaled(self.size);
 
         let glyphs = self.layout();
-        if glyphs.is_empty() {
-            return None;
-        }
-
-        let last_glyph = glyphs.last().unwrap();
-        let width = (last_glyph.position.x.ceil() + font.h_advance(last_glyph.id)).ceil() as u32;
+        let last_glyph = glyphs.last()?;
+        let width = (last_glyph.position.x + font.h_advance(last_glyph.id)).ceil() as u32;
         let height = font.height().ceil() as u32;
 
         let mut pixmap = Pixmap::new(width, height)?;
