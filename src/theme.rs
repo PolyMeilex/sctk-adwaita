@@ -69,6 +69,15 @@ impl Default for ColorTheme {
 }
 
 impl ColorTheme {
+    /// Automatically choose between light & dark themes based on:
+    /// * gsettings get org.gnome.desktop.interface color-scheme
+    pub fn auto() -> Self {
+        match crate::config::prefer_dark() {
+            true => Self::dark(),
+            false => Self::light(),
+        }
+    }
+
     pub fn light() -> Self {
         Self {
             active: ColorMap {
