@@ -170,8 +170,8 @@ impl CrossfontTitleText {
                 let color = color.premultiply().to_color_u8();
 
                 buffer.push(color.red());
-                buffer.push(color.red());
                 buffer.push(color.green());
+                buffer.push(color.blue());
                 buffer.push(color.alpha());
             }
 
