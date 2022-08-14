@@ -3,14 +3,19 @@ use tiny_skia::{Color, Pixmap};
 #[cfg(feature = "crossfont")]
 mod crossfont_renderer;
 
-#[cfg(not(feature = "crossfont"))]
+#[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+mod ab_glyph_renderer;
+
+#[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
 mod dumb;
 
 #[derive(Debug)]
 pub struct TitleText {
     #[cfg(feature = "crossfont")]
     imp: crossfont_renderer::CrossfontTitleText,
-    #[cfg(not(feature = "crossfont"))]
+    #[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+    imp: ab_glyph_renderer::AbGlyphTitleText,
+    #[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
     imp: dumb::DumbTitleText,
 }
 
@@ -21,7 +26,12 @@ impl TitleText {
             .ok()
             .map(|imp| Self { imp });
 
-        #[cfg(not(feature = "crossfont"))]
+        #[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+        return Some(Self {
+            imp: ab_glyph_renderer::AbGlyphTitleText::new(color),
+        });
+
+        #[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
         {
             let _ = color;
             return None;

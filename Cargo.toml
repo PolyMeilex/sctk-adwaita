@@ -14,10 +14,10 @@ smithay-client-toolkit = "0.16"
 tiny-skia = { version = "0.7.0", features = ["std", "simd"] }
 log = "0.4"
 
-crossfont = { version = "0.5.0", features = [
-    "force_system_fontconfig",
-], optional = true }
+# Draw title text using crossfont `--features crossfont`
+crossfont = { version = "0.5.0", features = ["force_system_fontconfig"], optional = true }
+# Draw title text using ab_glyph `--features ab_glyph`
+ab_glyph = { version = "0.2.15", optional = true }
 
 [features]
-# default = ["title"]
-title = ["crossfont"]
+default = ["ab_glyph"]
