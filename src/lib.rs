@@ -661,7 +661,7 @@ fn draw_headerbar(
 
         let x = x.max(margin_h + 5.0);
 
-        if let Some(clip) = Rect::from_xywh(0.0, 0.0, buttons.minimize.x() - 10.0, header_h) {
+        if let Some(clip) = Rect::from_xywh(0.0, 0.0, buttons.minimize.x() - 10.0, canvas_h) {
             let mut mask = ClipMask::new();
             mask.set_path(
                 canvas_w as u32,
