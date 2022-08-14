@@ -48,35 +48,37 @@ jobs:
           command: build
           args: --no-default-features
 
-  # TODO:
-  # crossfont-build:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
+  crossfont-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        
+      - name: System dependencies
+        run: sudo apt-get update && sudo apt-get install pkg-config cmake libfreetype6-dev libfontconfig1-dev
 
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         override: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --no-default-features --features crossfont
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --no-default-features --features crossfont
 
-  # ab-glyph-build:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
+  ab-glyph-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
 
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         profile: minimal
-  #         toolchain: stable
-  #         override: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-  #     - uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: --no-default-features --features ab_glyph
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --no-default-features --features ab_glyph
