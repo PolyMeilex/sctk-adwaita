@@ -40,7 +40,9 @@ fn main() {
         .expect("Failed to create a window !");
 
     window.set_title("/usr/lib/xorg/modules/input".to_string());
-    window.set_frame_config(sctk_adwaita::FrameConfig::light());
+
+    // // uncomment to override automatic theme selection
+    // window.set_frame_config(sctk_adwaita::FrameConfig::light());
 
     let mut pool = env
         .create_auto_pool()
@@ -85,7 +87,6 @@ fn main() {
     }
 }
 
-#[allow(clippy::many_single_char_names)]
 fn redraw(
     pool: &mut AutoMemPool,
     surface: &wl_surface::WlSurface,

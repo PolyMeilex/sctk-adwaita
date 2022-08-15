@@ -1,37 +1,31 @@
-use std::cell::RefCell;
-use std::fmt;
-use std::rc::Rc;
+mod buttons;
+mod config;
+mod parts;
+mod pointer;
+mod surface;
+pub mod theme;
+mod title;
 
+use crate::theme::ColorMap;
+use buttons::{ButtonKind, Buttons};
+use client::{
+    protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface},
+    Attached, DispatchData,
+};
 use parts::Parts;
 use pointer::PointerUserData;
-use smithay_client_toolkit::reexports::client;
-
-use client::protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface};
-use client::{Attached, DispatchData};
-use tiny_skia::{
-    ClipMask, Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point,
-    Rect, Transform,
-};
-
 use smithay_client_toolkit::{
+    reexports::client,
     seat::pointer::{ThemeManager, ThemeSpec, ThemedPointer},
     shm::AutoMemPool,
     window::{Frame, FrameRequest, State, WindowState},
 };
-
-pub mod theme;
+use std::{cell::RefCell, fmt, rc::Rc};
 use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
-
-mod buttons;
-use buttons::{ButtonKind, Buttons};
-
-use crate::theme::ColorMap;
-
-mod parts;
-mod pointer;
-mod surface;
-
-mod title;
+use tiny_skia::{
+    ClipMask, Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point,
+    Rect, Transform,
+};
 use title::TitleText;
 
 type SkiaResult = Option<()>;
@@ -133,6 +127,12 @@ pub struct FrameConfig {
 }
 
 impl FrameConfig {
+    pub fn auto() -> Self {
+        Self {
+            theme: ColorTheme::auto(),
+        }
+    }
+
     pub fn light() -> Self {
         Self {
             theme: ColorTheme::light(),
@@ -198,7 +198,7 @@ impl Frame for AdwaitaFrame {
 
         let pool = AutoMemPool::new(shm.clone())?;
 
-        let colors = ColorTheme::default();
+        let colors = ColorTheme::auto();
 
         Ok(AdwaitaFrame {
             base_surface: base_surface.clone(),

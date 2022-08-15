@@ -69,6 +69,16 @@ impl Default for ColorTheme {
 }
 
 impl ColorTheme {
+    /// Automatically choose between light & dark themes based on:
+    /// * dbus org.freedesktop.portal.Settings
+    ///   <https://flatpak.github.io/xdg-desktop-portal/#gdbus-interface-org-freedesktop-portal-Settings>
+    pub fn auto() -> Self {
+        match crate::config::prefer_dark() {
+            true => Self::dark(),
+            false => Self::light(),
+        }
+    }
+
     pub fn light() -> Self {
         Self {
             active: ColorMap {

@@ -1,3 +1,6 @@
+## Unreleased (0.5.1)
+- Use dbus org.freedesktop.portal.Settings to automatically choose light or dark theming.
+
 ## 0.5.0
 - `title` feature got removed
 - `ab_glyph` default feature got added (for `ab_glyph` based title rendering)
