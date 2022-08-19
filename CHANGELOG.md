@@ -1,4 +1,4 @@
-## Unreleased (0.5.1)
+## 0.5.1
 - Use dbus org.freedesktop.portal.Settings to automatically choose light or dark theming.
 - Double click detection fix.
 - Apply button click on release instead of press.
