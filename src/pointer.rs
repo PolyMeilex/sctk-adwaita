@@ -21,11 +21,13 @@ use crate::{
 
 pub(crate) struct PointerUserData {
     pub location: Location,
-    pub current_surface: DecorationPartKind,
+    current_surface: DecorationPartKind,
 
-    pub position: (f64, f64),
+    position: (f64, f64),
     pub seat: WlSeat,
-    pub last_click: Option<std::time::Instant>,
+    last_click: Option<std::time::Instant>,
+
+    lpm_grab: Option<ButtonKind>,
 }
 
 impl PointerUserData {
@@ -36,6 +38,7 @@ impl PointerUserData {
             position: (0.0, 0.0),
             seat,
             last_click: None,
+            lpm_grab: None,
         }
     }
 
@@ -101,20 +104,25 @@ impl PointerUserData {
                 state,
                 ..
             } => {
-                if state == wl_pointer::ButtonState::Pressed {
-                    let request = match button {
+                let request = if state == wl_pointer::ButtonState::Pressed {
+                    match button {
                         // Left mouse button.
-                        0x110 => {
-                            request_for_location_on_lmb(self, inner.maximized, inner.resizable)
-                        }
+                        0x110 => lmb_press(self, inner.maximized, inner.resizable),
                         // Right mouse button.
-                        0x111 => request_for_location_on_rmb(self),
+                        0x111 => rmb_press(self),
                         _ => None,
-                    };
-
-                    if let Some(request) = request {
-                        (inner.implem)(request, serial, ddata);
                     }
+                } else {
+                    // Left mouse button.
+                    if button == 0x110 {
+                        lmb_release(self, inner.maximized)
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(request) = request {
+                    (inner.implem)(request, serial, ddata);
                 }
             }
             _ => {}
@@ -122,7 +130,7 @@ impl PointerUserData {
     }
 }
 
-fn request_for_location_on_lmb(
+fn lmb_press(
     pointer_data: &mut PointerUserData,
     maximized: bool,
     resizable: bool,
@@ -179,22 +187,46 @@ fn request_for_location_on_lmb(
                 Some(FrameRequest::Move(pointer_data.seat.clone()))
             }
         }
-        Location::Button(ButtonKind::Close) => Some(FrameRequest::Close),
-        Location::Button(ButtonKind::Maximize) => {
-            if maximized {
-                Some(FrameRequest::UnMaximize)
-            } else {
-                Some(FrameRequest::Maximize)
-            }
+        Location::Button(btn) => {
+            pointer_data.lpm_grab = Some(btn);
+            None
         }
-        Location::Button(ButtonKind::Minimize) => Some(FrameRequest::Minimize),
         _ => None,
     };
 
     req
 }
 
-fn request_for_location_on_rmb(pointer_data: &PointerUserData) -> Option<FrameRequest> {
+fn lmb_release(pointer_data: &mut PointerUserData, maximized: bool) -> Option<FrameRequest> {
+    let lpm_grab = pointer_data.lpm_grab.take();
+
+    let req = match pointer_data.location {
+        Location::Button(btn) => {
+            if lpm_grab == Some(btn) {
+                let req = match btn {
+                    ButtonKind::Close => FrameRequest::Close,
+                    ButtonKind::Maximize => {
+                        if maximized {
+                            FrameRequest::UnMaximize
+                        } else {
+                            FrameRequest::Maximize
+                        }
+                    }
+                    ButtonKind::Minimize => FrameRequest::Minimize,
+                };
+
+                Some(req)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    req
+}
+
+fn rmb_press(pointer_data: &PointerUserData) -> Option<FrameRequest> {
     match pointer_data.location {
         Location::Head | Location::Button(_) => Some(FrameRequest::ShowMenu(
             pointer_data.seat.clone(),
