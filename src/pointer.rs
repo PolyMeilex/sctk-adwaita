@@ -161,8 +161,12 @@ fn request_for_location_on_lmb(
             ResizeEdge::TopRight,
         )),
         Location::Head => {
-            if let Some(last) = pointer_data.last_click {
+            let last_click = pointer_data.last_click.replace(std::time::Instant::now());
+
+            if let Some(last) = last_click {
                 if last.elapsed() < std::time::Duration::from_millis(1000) {
+                    pointer_data.last_click = None;
+
                     if maximized {
                         Some(FrameRequest::UnMaximize)
                     } else {
@@ -186,8 +190,6 @@ fn request_for_location_on_lmb(
         Location::Button(ButtonKind::Minimize) => Some(FrameRequest::Minimize),
         _ => None,
     };
-
-    pointer_data.last_click = Some(std::time::Instant::now());
 
     req
 }
