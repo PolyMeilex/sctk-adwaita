@@ -1,17 +1,22 @@
 //! Title renderer using ab_glyph & Cantarell-Regular.ttf (SIL Open Font Licence v1.1).
 //!
 //! Uses embedded font & requires no dynamically linked dependencies.
-use ab_glyph::{point, Font, FontRef, Glyph, PxScale, ScaleFont};
+use ab_glyph::{point, Font, FontArc, Glyph, PxScale, ScaleFont};
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+    process::Command,
+};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 
 const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
-/// Equivalent to ~10.5pt size, should match the crossfont version fairly well.
-const DEFAULT_PX_SIZE: f32 = 19.0;
+/// Matches current crossfont version. TODO read system config size.
+const DEFAULT_PT_SIZE: f32 = 10.0;
 
 #[derive(Debug)]
 pub struct AbGlyphTitleText {
     title: String,
-    font: FontRef<'static>,
+    font: FontArc,
     size: PxScale,
     color: Color,
     pixmap: Option<Pixmap>,
@@ -19,9 +24,16 @@ pub struct AbGlyphTitleText {
 
 impl AbGlyphTitleText {
     pub fn new(color: Color) -> Self {
-        // TODO Try to pick system default font & size then fallback?
-        let font = FontRef::try_from_slice(CANTARELL).unwrap();
-        let size = PxScale::from(DEFAULT_PX_SIZE);
+        // Try to pick system default font
+        let font = font_file_matching("sans-serif")
+            .and_then(read_to_vec)
+            .and_then(|data| FontArc::try_from_vec(data).ok())
+            // fallback to using embedded font if system font doesn't work
+            .unwrap_or_else(|| FontArc::try_from_slice(CANTARELL).unwrap());
+
+        let size = font
+            .pt_to_px_scale(DEFAULT_PT_SIZE)
+            .expect("invalid font units_per_em");
 
         Self {
             title: <_>::default(),
@@ -33,7 +45,10 @@ impl AbGlyphTitleText {
     }
 
     pub fn update_scale(&mut self, scale: u32) {
-        let new_scale = PxScale::from(DEFAULT_PX_SIZE * scale as f32);
+        let new_scale = self
+            .font
+            .pt_to_px_scale(DEFAULT_PT_SIZE * scale as f32)
+            .unwrap();
         if (self.size.x - new_scale.x).abs() > f32::EPSILON {
             self.size = new_scale;
             self.pixmap = self.render();
@@ -120,4 +135,22 @@ impl AbGlyphTitleText {
         }
         target
     }
+}
+
+/// Font-config without dynamically linked dependencies
+fn font_file_matching(pattern: &str) -> Option<File> {
+    Command::new("fc-match")
+        .arg("-f")
+        .arg("%{file}")
+        .arg(pattern)
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .and_then(|path| File::open(path.trim()).ok())
+}
+
+fn read_to_vec(file: File) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    BufReader::new(file).read_to_end(&mut data).ok()?;
+    Some(data)
 }
