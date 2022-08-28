@@ -1,3 +1,6 @@
+## Unreleased
+- `ab_glyph` feature will attempt to use system default font for consistency with `crossfont` feature.
+
 ## 0.5.1
 - Use dbus org.freedesktop.portal.Settings to automatically choose light or dark theming.
 - Double click detection fix.

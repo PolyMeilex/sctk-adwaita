@@ -135,7 +135,7 @@ fn lmb_press(
     maximized: bool,
     resizable: bool,
 ) -> Option<FrameRequest> {
-    let req = match pointer_data.location {
+    match pointer_data.location {
         Location::Top if resizable => Some(FrameRequest::Resize(
             pointer_data.seat.clone(),
             ResizeEdge::Top,
@@ -192,9 +192,7 @@ fn lmb_press(
             None
         }
         _ => None,
-    };
-
-    req
+    }
 }
 
 fn lmb_release(pointer_data: &mut PointerUserData, maximized: bool) -> Option<FrameRequest> {
