@@ -1,6 +1,9 @@
 use tiny_skia::{Color, Pixmap};
 
-pub mod font_preference;
+#[cfg(any(feature = "crossfont", feature = "ab_glyph"))]
+mod config;
+#[cfg(any(feature = "crossfont", feature = "ab_glyph"))]
+mod font_preference;
 
 #[cfg(feature = "crossfont")]
 mod crossfont_renderer;

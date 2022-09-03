@@ -1,4 +1,4 @@
-use crate::config;
+use crate::title::config;
 use crossfont::{GlyphKey, Rasterize, RasterizedGlyph};
 use tiny_skia::{Color, Pixmap, PixmapPaint, PixmapRef, Transform};
 

@@ -1,7 +1,7 @@
 //! Title renderer using ab_glyph & Cantarell-Regular.ttf (SIL Open Font Licence v1.1).
 //!
 //! Uses embedded font & requires no dynamically linked dependencies.
-use crate::{config, title::font_preference::FontPreference};
+use crate::title::{config, font_preference::FontPreference};
 use ab_glyph::{point, Font, FontArc, FontVec, Glyph, PxScale, ScaleFont, VariableFont};
 use std::{
     fs::File,
