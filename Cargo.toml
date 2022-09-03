@@ -21,3 +21,8 @@ ab_glyph = { version = "0.2.16", optional = true }
 
 [features]
 default = ["ab_glyph"]
+
+# TODO rm and use new releases
+[patch.crates-io]
+owned_ttf_parser = { git = "https://github.com/alexheretic/owned-ttf-parser" }
+ab_glyph = { git = "https://github.com/alexheretic/ab-glyph", branch = "variations" }

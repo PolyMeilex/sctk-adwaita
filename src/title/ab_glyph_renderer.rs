@@ -1,7 +1,8 @@
 //! Title renderer using ab_glyph & Cantarell-Regular.ttf (SIL Open Font Licence v1.1).
 //!
 //! Uses embedded font & requires no dynamically linked dependencies.
-use ab_glyph::{point, Font, FontArc, Glyph, PxScale, ScaleFont};
+use crate::{config, title::font_preference::FontPreference};
+use ab_glyph::{point, Font, FontArc, FontVec, Glyph, PxScale, ScaleFont, VariableFont};
 use std::{
     fs::File,
     io::{BufReader, Read},
@@ -10,13 +11,12 @@ use std::{
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 
 const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
-/// Matches current crossfont version. TODO read system config size.
-const DEFAULT_PT_SIZE: f32 = 10.0;
 
 #[derive(Debug)]
 pub struct AbGlyphTitleText {
     title: String,
     font: FontArc,
+    original_px_size: f32,
     size: PxScale,
     color: Color,
     pixmap: Option<Pixmap>,
@@ -24,20 +24,31 @@ pub struct AbGlyphTitleText {
 
 impl AbGlyphTitleText {
     pub fn new(color: Color) -> Self {
-        // Try to pick system default font
-        let font = font_file_matching("sans-serif")
+        let font_pref = config::titlebar_font().unwrap_or_default();
+        let font = font_file_matching(&font_pref)
             .and_then(read_to_vec)
-            .and_then(|data| FontArc::try_from_vec(data).ok())
+            .and_then(|data| {
+                let mut font = FontVec::try_from_vec(data).ok()?;
+                // basic "bold" handling for variable fonts
+                if font_pref
+                    .style
+                    .map_or(false, |s| s.eq_ignore_ascii_case("bold"))
+                {
+                    font.set_variation(b"wght", 700.0);
+                }
+                Some(FontArc::from(font))
+            })
             // fallback to using embedded font if system font doesn't work
             .unwrap_or_else(|| FontArc::try_from_slice(CANTARELL).unwrap());
 
         let size = font
-            .pt_to_px_scale(DEFAULT_PT_SIZE)
+            .pt_to_px_scale(font_pref.pt_size)
             .expect("invalid font units_per_em");
 
         Self {
             title: <_>::default(),
             font,
+            original_px_size: size.x,
             size,
             color,
             pixmap: None,
@@ -45,10 +56,7 @@ impl AbGlyphTitleText {
     }
 
     pub fn update_scale(&mut self, scale: u32) {
-        let new_scale = self
-            .font
-            .pt_to_px_scale(DEFAULT_PT_SIZE * scale as f32)
-            .unwrap();
+        let new_scale = PxScale::from(self.original_px_size * scale as f32);
         if (self.size.x - new_scale.x).abs() > f32::EPSILON {
             self.size = new_scale;
             self.pixmap = self.render();
@@ -138,11 +146,16 @@ impl AbGlyphTitleText {
 }
 
 /// Font-config without dynamically linked dependencies
-fn font_file_matching(pattern: &str) -> Option<File> {
+fn font_file_matching(pref: &FontPreference) -> Option<File> {
+    let mut pattern = pref.name.clone();
+    if let Some(style) = &pref.style {
+        pattern.push(':');
+        pattern.push_str(style);
+    }
     Command::new("fc-match")
         .arg("-f")
         .arg("%{file}")
-        .arg(pattern)
+        .arg(&pattern)
         .output()
         .ok()
         .and_then(|out| String::from_utf8(out.stdout).ok())

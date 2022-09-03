@@ -1,3 +1,4 @@
+use crate::config;
 use crossfont::{GlyphKey, Rasterize, RasterizedGlyph};
 use tiny_skia::{Color, Pixmap, PixmapPaint, PixmapRef, Transform};
 
@@ -33,17 +34,18 @@ impl CrossfontTitleText {
         let title = "".into();
         let scale = 1;
 
-        let font_desc = crossfont::FontDesc::new(
-            // "monospace",
-            "sans-serif",
-            crossfont::Style::Description {
+        let font_pref = config::titlebar_font().unwrap_or_default();
+        let font_style = font_pref
+            .style
+            .map(crossfont::Style::Specific)
+            .unwrap_or_else(|| crossfont::Style::Description {
                 slant: crossfont::Slant::Normal,
                 weight: crossfont::Weight::Normal,
-            },
-        );
+            });
+        let font_desc = crossfont::FontDesc::new(&font_pref.name, font_style);
 
         let mut rasterizer = crossfont::Rasterizer::new(scale as f32)?;
-        let size = crossfont::Size::new(10.0);
+        let size = crossfont::Size::new(font_pref.pt_size);
         let font_key = rasterizer.load_font(&font_desc, size)?;
 
         // Need to load at least one glyph for the face before calling metrics.

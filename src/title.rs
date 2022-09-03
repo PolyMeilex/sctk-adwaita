@@ -1,5 +1,7 @@
 use tiny_skia::{Color, Pixmap};
 
+pub mod font_preference;
+
 #[cfg(feature = "crossfont")]
 mod crossfont_renderer;
 

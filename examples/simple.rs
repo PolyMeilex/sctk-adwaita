@@ -13,7 +13,7 @@ fn main() {
 
     let mut event_loop = calloop::EventLoop::<Option<WEvent>>::try_new().unwrap();
 
-    let mut dimensions = (320u32, 240u32);
+    let mut dimensions = (380u32, 240u32);
 
     let surface = env.create_surface().detach();
 
