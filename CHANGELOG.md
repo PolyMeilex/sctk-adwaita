@@ -1,5 +1,7 @@
-## Unreleased
-- `ab_glyph` feature will attempt to use system default font for consistency with `crossfont` feature.
+## Unreleased (0.5.2)
+- `ab_glyph` & `crossfont` titles will use gnome "titlebar-font" config if available.
+- `ab_glyph` titles are now more consistent with `crossfont` titles both using system sans
+  if no better font config is available.
 
 ## 0.5.1
 - Use dbus org.freedesktop.portal.Settings to automatically choose light or dark theming.
