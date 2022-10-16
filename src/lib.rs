@@ -631,7 +631,7 @@ fn draw_headerbar(
 
     let colors = colors.for_state(state);
 
-    draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors);
+    draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors, is_maximized);
 
     if let Some(text_pixmap) = text_pixmap {
         let canvas_w = pixmap.width() as f32;
@@ -704,11 +704,12 @@ fn draw_headerbar_bg(
     margin_h: f32,
     margin_v: f32,
     colors: &ColorMap,
+    is_maximized: bool,
 ) -> SkiaResult {
     let w = pixmap.width() as f32;
     let h = pixmap.height() as f32;
 
-    let radius = 10.0 * scale;
+    let radius = if is_maximized { 0.0 } else { 10.0 * scale };
 
     let margin_h = margin_h - 1.0;
     let w = w - margin_h * 2.0;
