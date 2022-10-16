@@ -61,6 +61,7 @@ struct Inner {
     implem: Box<dyn FnMut(FrameRequest, u32, DispatchData)>,
     maximized: bool,
     fullscreened: bool,
+    tiled: bool,
 }
 
 impl fmt::Debug for Inner {
@@ -194,6 +195,7 @@ impl Frame for AdwaitaFrame {
             theme_over_surface,
             maximized: false,
             fullscreened: false,
+            tiled: false,
         }));
 
         let pool = AutoMemPool::new(shm.clone())?;
@@ -284,6 +286,13 @@ impl Frame for AdwaitaFrame {
         let new_fullscreened = states.contains(&State::Fullscreen);
         need_redraw |= new_fullscreened != inner.fullscreened;
         inner.fullscreened = new_fullscreened;
+
+        let new_tiled = states.contains(&State::TiledLeft)
+            || states.contains(&State::TiledRight)
+            || states.contains(&State::TiledTop)
+            || states.contains(&State::TiledBottom);
+        need_redraw |= new_tiled != inner.tiled;
+        inner.tiled = new_tiled;
 
         need_redraw
     }
@@ -418,6 +427,7 @@ impl AdwaitaFrame {
                         header_scale as f32,
                         inner.resizable,
                         inner.maximized,
+                        inner.tiled,
                         self.active,
                         &self.colors,
                         &self.buttons.borrow(),
@@ -619,6 +629,7 @@ fn draw_headerbar(
     scale: f32,
     maximizable: bool,
     is_maximized: bool,
+    tiled: bool,
     state: WindowState,
     colors: &ColorTheme,
     buttons: &Buttons,
@@ -631,7 +642,15 @@ fn draw_headerbar(
 
     let colors = colors.for_state(state);
 
-    draw_headerbar_bg(pixmap, scale, margin_h, margin_v, colors, is_maximized);
+    draw_headerbar_bg(
+        pixmap,
+        scale,
+        margin_h,
+        margin_v,
+        colors,
+        is_maximized,
+        tiled,
+    );
 
     if let Some(text_pixmap) = text_pixmap {
         let canvas_w = pixmap.width() as f32;
@@ -705,11 +724,16 @@ fn draw_headerbar_bg(
     margin_v: f32,
     colors: &ColorMap,
     is_maximized: bool,
+    tiled: bool,
 ) -> SkiaResult {
     let w = pixmap.width() as f32;
     let h = pixmap.height() as f32;
 
-    let radius = if is_maximized { 0.0 } else { 10.0 * scale };
+    let radius = if is_maximized || tiled {
+        0.0
+    } else {
+        10.0 * scale
+    };
 
     let margin_h = margin_h - 1.0;
     let w = w - margin_h * 2.0;
