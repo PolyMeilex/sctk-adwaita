@@ -1,7 +1,9 @@
-## Unreleased (0.5.2)
+## 0.5.2
 - `ab_glyph` & `crossfont` titles will use gnome "titlebar-font" config if available.
 - `ab_glyph` titles are now more consistent with `crossfont` titles both using system sans
   if no better font config is available.
+- Rounded corners are now disabled on maximized and tiled windows.
+- Double click interval is now 400ms (as previous 1s interval was caused by bug fixed in 0.5.1)
 
 ## 0.5.1
 - Use dbus org.freedesktop.portal.Settings to automatically choose light or dark theming.
