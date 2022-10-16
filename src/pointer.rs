@@ -172,7 +172,7 @@ fn lmb_press(
             let last_click = pointer_data.last_click.replace(std::time::Instant::now());
 
             if let Some(last) = last_click {
-                if last.elapsed() < std::time::Duration::from_millis(1000) {
+                if last.elapsed() < std::time::Duration::from_millis(400) {
                     pointer_data.last_click = None;
 
                     if maximized {
