@@ -14,7 +14,7 @@ use smithay_client_toolkit::{
 use crate::{
     buttons::{ButtonKind, Buttons},
     parts::DecorationPartKind,
-    precise_location,
+    precise_location, precise_location_b,
     theme::{BORDER_SIZE, HEADER_SIZE},
     Inner, Location,
 };
@@ -58,23 +58,34 @@ impl PointerUserData {
                 surface_x,
                 surface_y,
             } => {
-                self.location = precise_location(
-                    buttons,
-                    inner.parts.find_surface(&surface),
-                    inner.size.0,
-                    surface_x,
-                    surface_y,
-                );
-                self.current_surface = inner.parts.find_decoration_part(&surface);
-                self.position = (surface_x, surface_y);
-                change_pointer(pointer, inner, self.location, Some(serial))
-            }
-            Event::Leave { serial, .. } => {
-                self.current_surface = DecorationPartKind::None;
+                if let Some(decoration) = inner.decoration.as_ref() {
+                    if decoration.surface == surface {
+                        self.current_surface = DecorationPartKind::Header;
 
-                self.location = Location::None;
-                change_pointer(pointer, inner, self.location, Some(serial));
-                (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                        self.location =
+                            precise_location_b(buttons, inner.size.0, surface_x, surface_y);
+                        self.current_surface = inner.parts.find_decoration_part(&surface);
+                        self.position = (surface_x, surface_y);
+                        change_pointer(pointer, inner, self.location, Some(serial))
+                    } else {
+                        self.current_surface = DecorationPartKind::None;
+                    }
+                } else {
+                    self.current_surface = DecorationPartKind::None;
+                }
+            }
+            Event::Leave {
+                serial, surface, ..
+            } => {
+                if let Some(decoration) = inner.decoration.as_ref() {
+                    if decoration.surface == surface {
+                        self.current_surface = DecorationPartKind::None;
+                        self.location = Location::None;
+
+                        change_pointer(pointer, inner, self.location, Some(serial));
+                        (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                    }
+                }
             }
             Event::Motion {
                 surface_x,
@@ -82,8 +93,7 @@ impl PointerUserData {
                 ..
             } => {
                 self.position = (surface_x, surface_y);
-                let newpos =
-                    precise_location(buttons, self.location, inner.size.0, surface_x, surface_y);
+                let newpos = precise_location_b(buttons, inner.size.0, surface_x, surface_y);
                 if newpos != self.location {
                     match (newpos, self.location) {
                         (Location::Button(_), _) | (_, Location::Button(_)) => {

@@ -1,5 +1,6 @@
 mod buttons;
 mod config;
+mod decoration_surface;
 mod parts;
 mod pointer;
 mod surface;
@@ -12,6 +13,7 @@ use client::{
     protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface},
     Attached, DispatchData,
 };
+use decoration_surface::DecorationSurface;
 use parts::Parts;
 use pointer::PointerUserData;
 use smithay_client_toolkit::{
@@ -24,7 +26,7 @@ use std::{cell::RefCell, fmt, rc::Rc};
 use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
 use tiny_skia::{
     ClipMask, Color, FillRule, Paint, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point,
-    Rect, Transform,
+    Rect, Shader, Stroke, Transform,
 };
 use title::TitleText;
 
@@ -54,6 +56,7 @@ enum Location {
  */
 
 struct Inner {
+    decoration: Option<DecorationSurface>,
     parts: Parts,
     size: (u32, u32),
     resizable: bool,
@@ -78,6 +81,30 @@ impl fmt::Debug for Inner {
             .field("maximized", &self.maximized)
             .field("fullscreened", &self.fullscreened)
             .finish()
+    }
+}
+
+fn precise_location_b(buttons: &Buttons, width: u32, x: f64, y: f64) -> Location {
+    // Location::Top
+    match buttons.find_button(x, y) {
+        Location::Head => {
+            if y <= f64::from(BORDER_SIZE) {
+                if x <= f64::from(BORDER_SIZE) {
+                    Location::TopLeft
+                } else if x >= f64::from(width + BORDER_SIZE) {
+                    Location::TopRight
+                } else {
+                    Location::Top
+                }
+            } else if x < f64::from(BORDER_SIZE) {
+                Location::TopLeft
+            } else if x > f64::from(width) {
+                Location::TopRight
+            } else {
+                Location::Head
+            }
+        }
+        other => other,
     }
 }
 
@@ -188,6 +215,7 @@ impl Frame for AdwaitaFrame {
         };
 
         let inner = Rc::new(RefCell::new(Inner {
+            decoration: None,
             parts: Parts::default(),
             size: (1, 1),
             resizable: true,
@@ -301,6 +329,13 @@ impl Frame for AdwaitaFrame {
         self.hidden = hidden;
         let mut inner = self.inner.borrow_mut();
         if !self.hidden {
+            inner.decoration = Some(DecorationSurface::new(
+                &self.base_surface,
+                &self.compositor,
+                &self.subcompositor,
+                self.inner.clone(),
+            ));
+
             inner.parts.add_decorations(
                 &self.base_surface,
                 &self.compositor,
@@ -318,6 +353,11 @@ impl Frame for AdwaitaFrame {
 
     fn resize(&mut self, newsize: (u32, u32)) {
         self.inner.borrow_mut().size = newsize;
+
+        if let Some(decoration) = self.inner.borrow_mut().decoration.as_mut() {
+            decoration.update_window_size(newsize);
+        }
+
         self.buttons
             .borrow_mut()
             .arrange(newsize.0 + BORDER_SIZE * 2);
@@ -366,7 +406,7 @@ impl Frame for AdwaitaFrame {
 
 impl AdwaitaFrame {
     fn redraw_inner(&mut self) -> SkiaResult {
-        let inner = self.inner.borrow_mut();
+        let mut inner = self.inner.borrow_mut();
 
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.hidden || inner.fullscreened {
@@ -376,9 +416,33 @@ impl AdwaitaFrame {
 
         // `parts` can't be empty here, since the initial state for `self.hidden` is true, and
         // they will be created once `self.hidden` will become `false`.
-        let parts = &inner.parts;
 
         let (width, height) = inner.size;
+
+        let pointers = self
+            .pointers
+            .iter()
+            .flat_map(|p| {
+                if p.as_ref().is_alive() {
+                    let data: &RefCell<PointerUserData> = p.as_ref().user_data().get()?;
+                    Some(data.borrow().location)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<Location>>();
+
+        if let Some(decoration) = inner.decoration.as_mut() {
+            let colors = if self.active == WindowState::Active {
+                &self.colors.active
+            } else {
+                &self.colors.inactive
+            };
+
+            decoration.render(&mut self.pool, colors, &self.buttons.borrow(), &pointers);
+        }
+
+        let parts = &inner.parts;
 
         if let Some(decoration) = parts.decoration() {
             // Use header scale for all the thing.
@@ -414,59 +478,59 @@ impl AdwaitaFrame {
                     4 * header_width as i32,
                     wl_shm::Format::Argb8888,
                 ) {
-                    let mut pixmap = PixmapMut::from_bytes(canvas, header_width, header_height)?;
-                    pixmap.fill(Color::TRANSPARENT);
+                    // let mut pixmap = PixmapMut::from_bytes(canvas, header_width, header_height)?;
+                    // pixmap.fill(Color::TRANSPARENT);
 
-                    if let Some(title_text) = self.title_text.as_mut() {
-                        title_text.update_scale(header_scale);
-                    }
+                    // if let Some(title_text) = self.title_text.as_mut() {
+                    //     title_text.update_scale(header_scale);
+                    // }
 
-                    draw_headerbar(
-                        &mut pixmap,
-                        self.title_text.as_ref().map(|t| t.pixmap()).unwrap_or(None),
-                        header_scale as f32,
-                        inner.resizable,
-                        inner.maximized,
-                        inner.tiled,
-                        self.active,
-                        &self.colors,
-                        &self.buttons.borrow(),
-                        &self
-                            .pointers
-                            .iter()
-                            .flat_map(|p| {
-                                if p.as_ref().is_alive() {
-                                    let data: &RefCell<PointerUserData> =
-                                        p.as_ref().user_data().get()?;
-                                    Some(data.borrow().location)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect::<Vec<Location>>(),
-                    );
+                    // draw_headerbar(
+                    //     &mut pixmap,
+                    //     self.title_text.as_ref().map(|t| t.pixmap()).unwrap_or(None),
+                    //     header_scale as f32,
+                    //     inner.resizable,
+                    //     inner.maximized,
+                    //     inner.tiled,
+                    //     self.active,
+                    //     &self.colors,
+                    //     &self.buttons.borrow(),
+                    //     &self
+                    //         .pointers
+                    //         .iter()
+                    //         .flat_map(|p| {
+                    //             if p.as_ref().is_alive() {
+                    //                 let data: &RefCell<PointerUserData> =
+                    //                     p.as_ref().user_data().get()?;
+                    //                 Some(data.borrow().location)
+                    //             } else {
+                    //                 None
+                    //             }
+                    //         })
+                    //         .collect::<Vec<Location>>(),
+                    // );
 
-                    decoration.header.subsurface.set_position(
-                        -(BORDER_SIZE as i32),
-                        -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
-                    );
-                    decoration.header.surface.attach(Some(&buffer), 0, 0);
-                    if self.surface_version >= 4 {
-                        decoration.header.surface.damage_buffer(
-                            0,
-                            0,
-                            header_width as i32,
-                            header_height as i32,
-                        );
-                    } else {
-                        // surface is old and does not support damage_buffer, so we damage
-                        // in surface coordinates and hope it is not rescaled
-                        decoration
-                            .header
-                            .surface
-                            .damage(0, 0, width as i32, HEADER_SIZE as i32);
-                    }
-                    decoration.header.surface.commit();
+                    // decoration.header.subsurface.set_position(
+                    //     -(BORDER_SIZE as i32),
+                    //     -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                    // );
+                    // decoration.header.surface.attach(Some(&buffer), 0, 0);
+                    // if self.surface_version >= 4 {
+                    //     decoration.header.surface.damage_buffer(
+                    //         0,
+                    //         0,
+                    //         header_width as i32,
+                    //         header_height as i32,
+                    //     );
+                    // } else {
+                    //     // surface is old and does not support damage_buffer, so we damage
+                    //     // in surface coordinates and hope it is not rescaled
+                    //     decoration
+                    //         .header
+                    //         .surface
+                    //         .damage(0, 0, width as i32, HEADER_SIZE as i32);
+                    // }
+                    // decoration.header.surface.commit();
                 }
 
                 if inner.maximized {
@@ -475,137 +539,137 @@ impl AdwaitaFrame {
                     return Some(());
                 }
 
-                let w = ((width + 2 * BORDER_SIZE) * bottom_scale) as i32;
-                let h = (BORDER_SIZE * bottom_scale) as i32;
-                // -> bottom-subsurface
-                if let Ok((canvas, buffer)) = self.pool.buffer(
-                    w,
-                    h,
-                    (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
-                    wl_shm::Format::Argb8888,
-                ) {
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
-                    pixmap.fill(Color::TRANSPARENT);
+                // let w = ((width + 2 * BORDER_SIZE) * bottom_scale) as i32;
+                // let h = (BORDER_SIZE * bottom_scale) as i32;
+                // // -> bottom-subsurface
+                // if let Ok((canvas, buffer)) = self.pool.buffer(
+                //     w,
+                //     h,
+                //     (4 * bottom_scale * (width + 2 * BORDER_SIZE)) as i32,
+                //     wl_shm::Format::Argb8888,
+                // ) {
+                //     let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
+                //     pixmap.fill(Color::TRANSPARENT);
 
-                    let size = 1.0;
-                    let x = BORDER_SIZE as f32 * bottom_scale as f32 - 1.0;
-                    pixmap.fill_rect(
-                        Rect::from_xywh(
-                            x,
-                            0.0,
-                            w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0,
-                            size,
-                        )?,
-                        &border_paint,
-                        Transform::identity(),
-                        None,
-                    );
+                //     let size = 1.0;
+                //     let x = BORDER_SIZE as f32 * bottom_scale as f32 - 1.0;
+                //     pixmap.fill_rect(
+                //         Rect::from_xywh(
+                //             x,
+                //             0.0,
+                //             w as f32 - BORDER_SIZE as f32 * 2.0 * bottom_scale as f32 + 2.0,
+                //             size,
+                //         )?,
+                //         &border_paint,
+                //         Transform::identity(),
+                //         None,
+                //     );
 
-                    decoration
-                        .bottom
-                        .subsurface
-                        .set_position(-(BORDER_SIZE as i32), height as i32);
-                    decoration.bottom.surface.attach(Some(&buffer), 0, 0);
-                    if self.surface_version >= 4 {
-                        decoration.bottom.surface.damage_buffer(
-                            0,
-                            0,
-                            ((width + 2 * BORDER_SIZE) * bottom_scale) as i32,
-                            (BORDER_SIZE * bottom_scale) as i32,
-                        );
-                    } else {
-                        // surface is old and does not support damage_buffer, so we damage
-                        // in surface coordinates and hope it is not rescaled
-                        decoration.bottom.surface.damage(
-                            0,
-                            0,
-                            (width + 2 * BORDER_SIZE) as i32,
-                            BORDER_SIZE as i32,
-                        );
-                    }
-                    decoration.bottom.surface.commit();
-                }
+                //     decoration
+                //         .bottom
+                //         .subsurface
+                //         .set_position(-(BORDER_SIZE as i32), height as i32);
+                //     decoration.bottom.surface.attach(Some(&buffer), 0, 0);
+                //     if self.surface_version >= 4 {
+                //         decoration.bottom.surface.damage_buffer(
+                //             0,
+                //             0,
+                //             ((width + 2 * BORDER_SIZE) * bottom_scale) as i32,
+                //             (BORDER_SIZE * bottom_scale) as i32,
+                //         );
+                //     } else {
+                //         // surface is old and does not support damage_buffer, so we damage
+                //         // in surface coordinates and hope it is not rescaled
+                //         decoration.bottom.surface.damage(
+                //             0,
+                //             0,
+                //             (width + 2 * BORDER_SIZE) as i32,
+                //             BORDER_SIZE as i32,
+                //         );
+                //     }
+                //     decoration.bottom.surface.commit();
+                // }
 
-                let w = (BORDER_SIZE * left_scale) as i32;
-                let h = (height * left_scale) as i32;
-                // -> left-subsurface
-                if let Ok((canvas, buffer)) = self.pool.buffer(
-                    w,
-                    h,
-                    4 * (BORDER_SIZE * left_scale) as i32,
-                    wl_shm::Format::Argb8888,
-                ) {
-                    let mut bg = Paint::default();
-                    bg.set_color_rgba8(255, 0, 0, 255);
+                // let w = (BORDER_SIZE * left_scale) as i32;
+                // let h = (height * left_scale) as i32;
+                // // -> left-subsurface
+                // if let Ok((canvas, buffer)) = self.pool.buffer(
+                //     w,
+                //     h,
+                //     4 * (BORDER_SIZE * left_scale) as i32,
+                //     wl_shm::Format::Argb8888,
+                // ) {
+                //     let mut bg = Paint::default();
+                //     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
-                    pixmap.fill(Color::TRANSPARENT);
+                //     let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
+                //     pixmap.fill(Color::TRANSPARENT);
 
-                    let size = 1.0;
-                    pixmap.fill_rect(
-                        Rect::from_xywh(w as f32 - size, 0.0, w as f32, h as f32)?,
-                        &border_paint,
-                        Transform::identity(),
-                        None,
-                    );
+                //     let size = 1.0;
+                //     pixmap.fill_rect(
+                //         Rect::from_xywh(w as f32 - size, 0.0, w as f32, h as f32)?,
+                //         &border_paint,
+                //         Transform::identity(),
+                //         None,
+                //     );
 
-                    decoration
-                        .left
-                        .subsurface
-                        .set_position(-(BORDER_SIZE as i32), 0);
-                    decoration.left.surface.attach(Some(&buffer), 0, 0);
-                    if self.surface_version >= 4 {
-                        decoration.left.surface.damage_buffer(0, 0, w, h);
-                    } else {
-                        // surface is old and does not support damage_buffer, so we damage
-                        // in surface coordinates and hope it is not rescaled
-                        decoration.left.surface.damage(
-                            0,
-                            0,
-                            BORDER_SIZE as i32,
-                            (height + HEADER_SIZE) as i32,
-                        );
-                    }
-                    decoration.left.surface.commit();
-                }
+                //     decoration
+                //         .left
+                //         .subsurface
+                //         .set_position(-(BORDER_SIZE as i32), 0);
+                //     decoration.left.surface.attach(Some(&buffer), 0, 0);
+                //     if self.surface_version >= 4 {
+                //         decoration.left.surface.damage_buffer(0, 0, w, h);
+                //     } else {
+                //         // surface is old and does not support damage_buffer, so we damage
+                //         // in surface coordinates and hope it is not rescaled
+                //         decoration.left.surface.damage(
+                //             0,
+                //             0,
+                //             BORDER_SIZE as i32,
+                //             (height + HEADER_SIZE) as i32,
+                //         );
+                //     }
+                //     decoration.left.surface.commit();
+                // }
 
-                let w = (BORDER_SIZE * right_scale) as i32;
-                let h = (height * right_scale) as i32;
-                // -> right-subsurface
-                if let Ok((canvas, buffer)) = self.pool.buffer(
-                    w,
-                    h,
-                    4 * (BORDER_SIZE * right_scale) as i32,
-                    wl_shm::Format::Argb8888,
-                ) {
-                    let mut bg = Paint::default();
-                    bg.set_color_rgba8(255, 0, 0, 255);
+                // let w = (BORDER_SIZE * right_scale) as i32;
+                // let h = (height * right_scale) as i32;
+                // // -> right-subsurface
+                // if let Ok((canvas, buffer)) = self.pool.buffer(
+                //     w,
+                //     h,
+                //     4 * (BORDER_SIZE * right_scale) as i32,
+                //     wl_shm::Format::Argb8888,
+                // ) {
+                //     let mut bg = Paint::default();
+                //     bg.set_color_rgba8(255, 0, 0, 255);
 
-                    let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
-                    pixmap.fill(Color::TRANSPARENT);
+                //     let mut pixmap = PixmapMut::from_bytes(canvas, w as u32, h as u32)?;
+                //     pixmap.fill(Color::TRANSPARENT);
 
-                    let size = 1.0;
-                    pixmap.fill_rect(
-                        Rect::from_xywh(0.0, 0.0, size, h as f32)?,
-                        &border_paint,
-                        Transform::identity(),
-                        None,
-                    );
+                //     let size = 1.0;
+                //     pixmap.fill_rect(
+                //         Rect::from_xywh(0.0, 0.0, size, h as f32)?,
+                //         &border_paint,
+                //         Transform::identity(),
+                //         None,
+                //     );
 
-                    decoration.right.subsurface.set_position(width as i32, 0);
-                    decoration.right.surface.attach(Some(&buffer), 0, 0);
-                    if self.surface_version >= 4 {
-                        decoration.right.surface.damage_buffer(0, 0, w, h);
-                    } else {
-                        // surface is old and does not support damage_buffer, so we damage
-                        // in surface coordinates and hope it is not rescaled
-                        decoration
-                            .right
-                            .surface
-                            .damage(0, 0, BORDER_SIZE as i32, height as i32);
-                    }
-                    decoration.right.surface.commit();
-                }
+                //     decoration.right.subsurface.set_position(width as i32, 0);
+                //     decoration.right.surface.attach(Some(&buffer), 0, 0);
+                //     if self.surface_version >= 4 {
+                //         decoration.right.surface.damage_buffer(0, 0, w, h);
+                //     } else {
+                //         // surface is old and does not support damage_buffer, so we damage
+                //         // in surface coordinates and hope it is not rescaled
+                //         decoration
+                //             .right
+                //             .surface
+                //             .damage(0, 0, BORDER_SIZE as i32, height as i32);
+                //     }
+                //     decoration.right.surface.commit();
+                // }
             }
         }
 
@@ -623,112 +687,17 @@ impl Drop for AdwaitaFrame {
     }
 }
 
-fn draw_headerbar(
-    pixmap: &mut PixmapMut,
-    text_pixmap: Option<&Pixmap>,
-    scale: f32,
-    maximizable: bool,
-    is_maximized: bool,
-    tiled: bool,
-    state: WindowState,
-    colors: &ColorTheme,
-    buttons: &Buttons,
-    mouses: &[Location],
-) {
-    let border_size = BORDER_SIZE as f32 * scale;
-
-    let margin_h = border_size;
-    let margin_v = border_size;
-
-    let colors = colors.for_state(state);
-
-    draw_headerbar_bg(
-        pixmap,
-        scale,
-        margin_h,
-        margin_v,
-        colors,
-        is_maximized,
-        tiled,
-    );
-
-    if let Some(text_pixmap) = text_pixmap {
-        let canvas_w = pixmap.width() as f32;
-        let canvas_h = pixmap.height() as f32;
-
-        let header_w = canvas_w - margin_h * 2.0;
-        let header_h = canvas_h - margin_v;
-
-        let text_w = text_pixmap.width() as f32;
-        let text_h = text_pixmap.height() as f32;
-
-        let x = header_w / 2.0 - text_w / 2.0;
-        let y = header_h / 2.0 - text_h / 2.0;
-
-        let x = margin_h + x;
-        let y = margin_v + y;
-
-        let (x, y) = if x + text_w < buttons.minimize.x() - 10.0 {
-            (x, y)
-        } else {
-            let y = header_h / 2.0 - text_h / 2.0;
-
-            let x = buttons.minimize.x() - text_w - 10.0;
-            let y = margin_v + y;
-            (x, y)
-        };
-
-        let x = x.max(margin_h + 5.0);
-
-        if let Some(clip) = Rect::from_xywh(0.0, 0.0, buttons.minimize.x() - 10.0, canvas_h) {
-            let mut mask = ClipMask::new();
-            mask.set_path(
-                canvas_w as u32,
-                canvas_h as u32,
-                &PathBuilder::from_rect(clip),
-                FillRule::Winding,
-                false,
-            );
-            pixmap.draw_pixmap(
-                x as i32,
-                y as i32,
-                text_pixmap.as_ref(),
-                &PixmapPaint::default(),
-                Transform::identity(),
-                Some(&mask),
-            );
-        }
-    }
-
-    if buttons.close.x() > margin_h {
-        buttons.close.draw_close(scale, colors, mouses, pixmap);
-    }
-
-    if buttons.maximize.x() > margin_h {
-        buttons
-            .maximize
-            .draw_maximize(scale, colors, mouses, maximizable, is_maximized, pixmap);
-    }
-
-    if buttons.minimize.x() > margin_h {
-        buttons
-            .minimize
-            .draw_minimize(scale, colors, mouses, pixmap);
-    }
-}
-
-fn draw_headerbar_bg(
+fn draw_decoration_background(
     pixmap: &mut PixmapMut,
     scale: f32,
     margin_h: f32,
     margin_v: f32,
+    width: f32,
+    height: f32,
     colors: &ColorMap,
     is_maximized: bool,
     tiled: bool,
 ) -> SkiaResult {
-    let w = pixmap.width() as f32;
-    let h = pixmap.height() as f32;
-
     let radius = if is_maximized || tiled {
         0.0
     } else {
@@ -736,21 +705,22 @@ fn draw_headerbar_bg(
     };
 
     let margin_h = margin_h - 1.0;
-    let w = w - margin_h * 2.0;
 
-    let bg = rounded_headerbar_shape(margin_h, margin_v, w, h, radius)?;
+    let bg = rounded_headerbar_shape(margin_h, margin_v, width, height, radius)?;
+    let header = rounded_headerbar_shape(margin_h, margin_v, width, HEADER_SIZE as f32, radius)?;
 
     pixmap.fill_path(
-        &bg,
+        &header,
         &colors.headerbar_paint(),
         FillRule::Winding,
         Transform::identity(),
         None,
     );
 
-    pixmap.fill_rect(
-        Rect::from_xywh(margin_h, h - 1.0, w, h)?,
+    pixmap.stroke_path(
+        &bg,
         &colors.border_paint(),
+        &Stroke::default(),
         Transform::identity(),
         None,
     );
