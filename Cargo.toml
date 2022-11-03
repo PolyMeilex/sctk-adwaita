@@ -17,6 +17,7 @@ tiny-skia = { version = "0.11", default-features = false, features = [
   "simd",
 ] }
 smithay-client-toolkit = { version = "0.18.0", default_features = false }
+once_cell = { version = "1.16.0", optional = true }
 
 # Draw title text using crossfont `--features crossfont`
 crossfont = { version = "0.7.0", features = [
@@ -24,8 +25,11 @@ crossfont = { version = "0.7.0", features = [
 ], optional = true }
 # Draw title text using ab_glyph `--features ab_glyph`
 ab_glyph = { version = "0.2.17", optional = true }
+# Draw title text using cosmic-text `--features cosmic-text`
+cosmic-text = { version = "0.10.0", optional = true }
 
 [features]
 default = ["ab_glyph"]
 crossfont = ["dep:crossfont"]
 ab_glyph = ["dep:ab_glyph", "memmap2"]
+cosmic-text = ["once_cell", "dep:cosmic-text"]

@@ -8,19 +8,40 @@ mod font_preference;
 #[cfg(feature = "crossfont")]
 mod crossfont_renderer;
 
-#[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+#[cfg(feature = "cosmic-text")]
+mod cosmic_text_renderer;
+
+#[cfg(all(
+    not(feature = "crossfont"),
+    not(feature = "cosmic-text"),
+    feature = "ab_glyph"
+))]
 mod ab_glyph_renderer;
 
-#[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
+#[cfg(all(
+    not(feature = "crossfont"),
+    not(feature = "cosmic-text"),
+    not(feature = "ab_glyph")
+))]
 mod dumb;
 
 #[derive(Debug)]
 pub struct TitleText {
     #[cfg(feature = "crossfont")]
     imp: crossfont_renderer::CrossfontTitleText,
-    #[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+    #[cfg(feature = "cosmic-text")]
+    imp: cosmic_text_renderer::CosmicTextTitleText,
+    #[cfg(all(
+        not(feature = "crossfont"),
+        not(feature = "cosmic-text"),
+        feature = "ab_glyph"
+    ))]
     imp: ab_glyph_renderer::AbGlyphTitleText,
-    #[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
+    #[cfg(all(
+        not(feature = "crossfont"),
+        not(feature = "cosmic-text"),
+        not(feature = "ab_glyph")
+    ))]
     imp: dumb::DumbTitleText,
 }
 
@@ -31,12 +52,25 @@ impl TitleText {
             .ok()
             .map(|imp| Self { imp });
 
-        #[cfg(all(not(feature = "crossfont"), feature = "ab_glyph"))]
+        #[cfg(feature = "cosmic-text")]
+        return Some(Self {
+            imp: cosmic_text_renderer::CosmicTextTitleText::new(color),
+        });
+
+        #[cfg(all(
+            not(feature = "crossfont"),
+            not(feature = "cosmic-text"),
+            feature = "ab_glyph"
+        ))]
         return Some(Self {
             imp: ab_glyph_renderer::AbGlyphTitleText::new(color),
         });
 
-        #[cfg(all(not(feature = "crossfont"), not(feature = "ab_glyph")))]
+        #[cfg(all(
+            not(feature = "crossfont"),
+            not(feature = "cosmic-text"),
+            not(feature = "ab_glyph")
+        ))]
         {
             let _ = color;
             return None;
