@@ -11,14 +11,14 @@ use smithay_client_toolkit::{
     shm::AutoMemPool,
     window::FrameRequest,
 };
-use tiny_skia::{Color, PixmapMut};
+use tiny_skia::PixmapMut;
 
 use crate::{
     buttons::Buttons,
     surface,
     theme::{ColorMap, BORDER_SIZE, HEADER_SIZE},
     title::TitleText,
-    Inner, Location,
+    utils, Inner, Location,
 };
 
 #[derive(Debug)]
@@ -26,7 +26,13 @@ pub(crate) struct DecorationSurface {
     pub surface: WlSurface,
     subsurface: WlSubsurface,
     window_size: (u32, u32),
-    pub surface_size: (u32, u32),
+    surface_size: (u32, u32),
+    maximized_surface_size: (u32, u32),
+
+    maximized: bool,
+    tiled: bool,
+    resizable: bool,
+    buttons: Buttons,
 }
 
 impl DecorationSurface {
@@ -57,21 +63,47 @@ impl DecorationSurface {
             surface,
             subsurface,
             surface_size: (0, 0),
+            maximized_surface_size: (0, 0),
             window_size: (0, 0),
+            maximized: false,
+            tiled: false,
+            resizable: true,
+            buttons: Buttons::default(),
         }
+    }
+
+    pub fn surface_size(&self) -> (u32, u32) {
+        if self.maximized {
+            self.maximized_surface_size
+        } else {
+            self.surface_size
+        }
+    }
+
+    pub fn set_maximized(&mut self, maximized: bool) {
+        self.maximized = maximized;
+
+        if maximized {
+            self.subsurface.set_position(0, -(HEADER_SIZE as i32));
+        } else {
+            self.subsurface.set_position(
+                -(BORDER_SIZE as i32),
+                -(HEADER_SIZE as i32) - (BORDER_SIZE as i32),
+            );
+        }
+    }
+
+    pub fn set_title(&mut self, tiled: bool) {
+        self.tiled = tiled;
+    }
+
+    pub fn set_resizable(&mut self, resizable: bool) {
+        self.resizable = resizable;
     }
 
     pub fn hide_decoration(&self) {
         self.surface.attach(None, 0, 0);
         self.surface.commit();
-    }
-
-    pub fn hide_borders(&self) {
-        todo!()
-        // for p in self.iter().iter().skip(1) {
-        //     p.surface.attach(None, 0, 0);
-        //     p.surface.commit();
-        // }
     }
 
     pub fn scale(&self) -> u32 {
@@ -81,16 +113,14 @@ impl DecorationSurface {
     pub fn update_window_size(&mut self, (w, h): (u32, u32)) {
         self.window_size = (w, h);
         self.surface_size = (w + BORDER_SIZE * 2, h + HEADER_SIZE + BORDER_SIZE * 2);
+        self.maximized_surface_size = (w, h + HEADER_SIZE);
     }
 
     pub fn render(
-        &self,
+        &mut self,
         pool: &mut AutoMemPool,
         colors: &ColorMap,
-        buttons: &Buttons,
         mouses: &[Location],
-        maximizable: bool,
-        is_maximized: bool,
         mut title_text: Option<&mut TitleText>,
     ) {
         let scale = self.scale();
@@ -100,74 +130,93 @@ impl DecorationSurface {
             title_text.update_color(colors.font_color);
         }
 
+        let surface_size = self.surface_size();
+
         if let Ok((canvas, buffer)) = pool.buffer(
-            self.surface_size.0 as i32,
-            self.surface_size.1 as i32,
-            4 * self.surface_size.0 as i32,
+            surface_size.0 as i32,
+            surface_size.1 as i32,
+            4 * surface_size.0 as i32,
             wl_shm::Format::Argb8888,
         ) {
-            if let Some(mut pixmap) =
-                PixmapMut::from_bytes(canvas, self.surface_size.0, self.surface_size.1)
+            if let Some(mut pixmap) = PixmapMut::from_bytes(canvas, surface_size.0, surface_size.1)
             {
-                pixmap.fill(Color::WHITE);
+                let (x, y) = if self.maximized {
+                    (0, 0)
+                } else {
+                    (BORDER_SIZE, BORDER_SIZE)
+                };
 
-                let (header_width, header_height) = buttons.scaled_size();
+                self.buttons.arrange((x, y), self.surface_size().0, scale);
 
-                let margin_h = BORDER_SIZE as f32;
-                let margin_v = BORDER_SIZE as f32;
-                let scale = 1.0;
-
-                crate::draw_decoration_background(
-                    &mut pixmap,
-                    scale,
-                    (margin_h, margin_v),
-                    (
-                        self.window_size.0 as f32 + 1.0,
-                        self.window_size.1 as f32 + header_height as f32,
-                    ),
-                    colors,
-                    false,
-                    false,
-                );
-
-                if let Some(text_pixmap) = title_text.and_then(|t| t.pixmap()) {
-                    crate::draw_title(
-                        &mut pixmap,
-                        text_pixmap,
-                        (margin_h, margin_v),
-                        (header_width, header_height),
-                        buttons,
-                    );
+                crate::renderer::DecorationRenderer {
+                    x: x as f32,
+                    y: y as f32,
+                    scale: scale as f32,
+                    window_size: self.window_size,
+                    maximized: self.maximized,
+                    tiled: self.tiled,
+                    resizable: self.resizable,
                 }
-
-                if buttons.close.x() > margin_h {
-                    buttons.close.draw_close(scale, colors, mouses, &mut pixmap);
-                }
-
-                if buttons.maximize.x() > margin_h {
-                    buttons.maximize.draw_maximize(
-                        scale,
-                        colors,
-                        mouses,
-                        maximizable,
-                        is_maximized,
-                        &mut pixmap,
-                    );
-                }
-
-                if buttons.minimize.x() > margin_h {
-                    buttons
-                        .minimize
-                        .draw_minimize(scale, colors, mouses, &mut pixmap);
-                }
+                .render(&mut pixmap, &self.buttons, colors, title_text, mouses);
             }
 
             self.surface.attach(Some(&buffer), 0, 0);
         }
 
-        // TODO: Damage
+        // TODO: Better damage?
         self.surface.damage(0, 0, i32::MAX, i32::MAX);
         self.surface.commit();
+    }
+
+    pub fn precise_location(&self, x: f64, y: f64) -> Location {
+        let (width, height) = self.surface_size();
+
+        match self.buttons.find_button(x, y) {
+            Some(button) => Location::Button(button),
+            None => {
+                let top_border = utils::HitBox::new(0.0, 0.0, width as f64, BORDER_SIZE as f64);
+                let bottom_border = utils::HitBox::new(
+                    0.0,
+                    height as f64 - BORDER_SIZE as f64,
+                    width as f64,
+                    BORDER_SIZE as f64,
+                );
+
+                let left_border = utils::HitBox::new(0.0, 0.0, BORDER_SIZE as f64, height as f64);
+                let right_border =
+                    utils::HitBox::new(width as f64 - 5.0, 0.0, BORDER_SIZE as f64, height as f64);
+
+                let is_top = top_border.contains(x, y);
+                let is_bottom = bottom_border.contains(x, y);
+
+                let is_left = left_border.contains(x, y);
+                let is_right = right_border.contains(x, y);
+
+                if is_top {
+                    if is_left {
+                        Location::TopLeft
+                    } else if is_right {
+                        Location::TopRight
+                    } else {
+                        Location::Top
+                    }
+                } else if is_bottom {
+                    if is_left {
+                        Location::BottomLeft
+                    } else if is_right {
+                        Location::BottomRight
+                    } else {
+                        Location::Bottom
+                    }
+                } else if is_left {
+                    Location::Left
+                } else if is_right {
+                    Location::Right
+                } else {
+                    Location::Head
+                }
+            }
+        }
     }
 }
 

@@ -2,6 +2,7 @@ mod buttons;
 mod config;
 mod decoration_surface;
 mod pointer;
+mod renderer;
 mod surface;
 pub mod theme;
 mod title;
@@ -22,7 +23,7 @@ use smithay_client_toolkit::{
     window::{Frame, FrameRequest, State, WindowState},
 };
 use std::{cell::RefCell, fmt, rc::Rc};
-use theme::{ColorTheme, BORDER_SIZE, HEADER_SIZE};
+use theme::{ColorTheme, HEADER_SIZE};
 use tiny_skia::{
     ClipMask, FillRule, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point, Rect, Stroke,
     Transform,
@@ -30,10 +31,6 @@ use tiny_skia::{
 use title::TitleText;
 
 type SkiaResult = Option<()>;
-
-/*
- * Utilities
- */
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Location {
@@ -49,10 +46,6 @@ enum Location {
     TopLeft,
     Button(ButtonKind),
 }
-
-/*
- * The core frame
- */
 
 struct Inner {
     decoration: Option<DecorationSurface>,
@@ -118,9 +111,7 @@ pub struct AdwaitaFrame {
     hidden: bool,
     pointers: Vec<ThemedPointer>,
     themer: ThemeManager,
-    surface_version: u32,
 
-    buttons: Rc<RefCell<Buttons>>,
     colors: ColorTheme,
     title: Option<String>,
     title_text: Option<TitleText>,
@@ -171,8 +162,6 @@ impl Frame for AdwaitaFrame {
             hidden: true,
             pointers: Vec::new(),
             themer,
-            surface_version: compositor.as_ref().version(),
-            buttons: Default::default(),
             title: None,
             title_text: TitleText::new(colors.active.font_color),
             colors,
@@ -182,7 +171,6 @@ impl Frame for AdwaitaFrame {
     fn new_seat(&mut self, seat: &Attached<wl_seat::WlSeat>) {
         let inner = self.inner.clone();
 
-        let buttons = self.buttons.clone();
         let pointer = self.themer.theme_pointer_with_impl(
             seat,
             move |event, pointer: ThemedPointer, ddata: DispatchData| {
@@ -193,7 +181,7 @@ impl Frame for AdwaitaFrame {
                 {
                     let mut data = data.borrow_mut();
                     let mut inner = inner.borrow_mut();
-                    data.event(event, &mut inner, &buttons.borrow(), &pointer, ddata);
+                    data.event(event, &mut inner, &pointer, ddata);
                 }
             },
         );
@@ -253,6 +241,11 @@ impl Frame for AdwaitaFrame {
         need_redraw |= new_tiled != inner.tiled;
         inner.tiled = new_tiled;
 
+        if let Some(decor) = inner.decoration.as_mut() {
+            decor.set_maximized(new_maximized);
+            decor.set_title(new_tiled);
+        }
+
         need_redraw
     }
 
@@ -273,6 +266,10 @@ impl Frame for AdwaitaFrame {
 
     fn set_resizable(&mut self, resizable: bool) {
         self.inner.borrow_mut().resizable = resizable;
+
+        if let Some(decor) = self.inner.borrow_mut().decoration.as_mut() {
+            decor.set_resizable(resizable);
+        }
     }
 
     fn resize(&mut self, newsize: (u32, u32)) {
@@ -281,18 +278,10 @@ impl Frame for AdwaitaFrame {
         if let Some(decoration) = self.inner.borrow_mut().decoration.as_mut() {
             decoration.update_window_size(newsize);
         }
-
-        self.buttons
-            .borrow_mut()
-            .arrange(newsize.0 + BORDER_SIZE * 2);
     }
 
     fn redraw(&mut self) {
         let inner = &mut *self.inner.borrow_mut();
-
-        if let Some(decor) = inner.decoration.as_ref() {
-            self.buttons.borrow_mut().update_scale(decor.scale());
-        }
 
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.hidden || inner.fullscreened {
@@ -319,10 +308,7 @@ impl Frame for AdwaitaFrame {
             decoration.render(
                 &mut self.pool,
                 self.colors.for_state(self.active),
-                &self.buttons.borrow(),
                 &pointers,
-                inner.resizable,
-                inner.maximized,
                 self.title_text.as_mut(),
             );
         }
@@ -535,53 +521,4 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
     pb.close();
 
     pb.finish()
-}
-
-fn precise_location(buttons: &Buttons, (width, height): (u32, u32), x: f64, y: f64) -> Location {
-    match buttons.find_button(x, y) {
-        Some(button) => Location::Button(button),
-        None => {
-            let top_border = utils::HitBox::new(0.0, 0.0, width as f64, BORDER_SIZE as f64);
-            let bottom_border = utils::HitBox::new(
-                0.0,
-                height as f64 - BORDER_SIZE as f64,
-                width as f64,
-                BORDER_SIZE as f64,
-            );
-
-            let left_border = utils::HitBox::new(0.0, 0.0, BORDER_SIZE as f64, height as f64);
-            let right_border =
-                utils::HitBox::new(width as f64 - 5.0, 0.0, BORDER_SIZE as f64, height as f64);
-
-            let is_top = top_border.contains(x, y);
-            let is_bottom = bottom_border.contains(x, y);
-
-            let is_left = left_border.contains(x, y);
-            let is_right = right_border.contains(x, y);
-
-            if is_top {
-                if is_left {
-                    Location::TopLeft
-                } else if is_right {
-                    Location::TopRight
-                } else {
-                    Location::Top
-                }
-            } else if is_bottom {
-                if is_left {
-                    Location::BottomLeft
-                } else if is_right {
-                    Location::BottomRight
-                } else {
-                    Location::Bottom
-                }
-            } else if is_left {
-                Location::Left
-            } else if is_right {
-                Location::Right
-            } else {
-                Location::Head
-            }
-        }
-    }
 }

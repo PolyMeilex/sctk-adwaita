@@ -1,10 +1,7 @@
 use smithay_client_toolkit::window::ButtonState;
 use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
-use crate::{
-    theme::{ColorMap, BORDER_SIZE},
-    utils, Location, SkiaResult,
-};
+use crate::{theme::ColorMap, utils, Location, SkiaResult};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ButtonKind {
@@ -268,7 +265,6 @@ pub(crate) struct Buttons {
     pub minimize: Button,
 
     w: u32,
-    h: u32,
 
     scale: u32,
 }
@@ -282,23 +278,25 @@ impl Default for Buttons {
             scale: 1,
 
             w: 0,
-            h: super::theme::HEADER_SIZE,
         }
     }
 }
 
 impl Buttons {
-    pub fn arrange(&mut self, w: u32) {
+    pub fn arrange(&mut self, (margin_h, margin_v): (u32, u32), w: u32, scale: u32) {
         self.w = w;
+        self.scale = scale;
 
         let scale = self.scale as f32;
-        let margin_top = BORDER_SIZE as f32 * scale;
+        let margin_vertical = margin_v as f32 * scale;
+        let margin_horizontal = margin_h as f32 * scale;
+
         let margin = 5.0 * scale;
         let spacing = 13.0 * scale;
         let size = 12.0 * 2.0 * scale;
 
-        let mut x = w as f32 * scale - margin - BORDER_SIZE as f32 * scale;
-        let y = margin + margin_top;
+        let mut x = w as f32 * scale - margin - margin_horizontal;
+        let y = margin + margin_vertical;
 
         x -= size;
         self.close.x = x;
@@ -318,13 +316,6 @@ impl Buttons {
         self.minimize.size = size;
     }
 
-    pub fn update_scale(&mut self, scale: u32) {
-        if self.scale != scale {
-            self.scale = scale;
-            self.arrange(self.w);
-        }
-    }
-
     pub fn find_button(&self, x: f64, y: f64) -> Option<ButtonKind> {
         let x = x * self.scale as f64;
         let y = y * self.scale as f64;
@@ -337,9 +328,5 @@ impl Buttons {
         } else {
             None
         }
-    }
-
-    pub fn scaled_size(&self) -> (u32, u32) {
-        (self.w * self.scale, self.h * self.scale)
     }
 }

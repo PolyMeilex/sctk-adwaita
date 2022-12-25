@@ -12,8 +12,7 @@ use smithay_client_toolkit::{
 };
 
 use crate::{
-    buttons::{ButtonKind, Buttons},
-    precise_location,
+    buttons::ButtonKind,
     theme::{BORDER_SIZE, HEADER_SIZE},
     Inner, Location,
 };
@@ -45,7 +44,6 @@ impl PointerUserData {
         &mut self,
         event: wl_pointer::Event,
         inner: &mut Inner,
-        buttons: &Buttons,
         pointer: &ThemedPointer,
         ddata: DispatchData<'_>,
     ) {
@@ -61,14 +59,7 @@ impl PointerUserData {
                     if decoration.surface == surface {
                         self.above_decorations = true;
 
-                        self.location = precise_location(
-                            buttons,
-                            decoration.surface_size,
-                            // inner.size.0,
-                            // inner.size.1,
-                            surface_x,
-                            surface_y,
-                        );
+                        self.location = decoration.precise_location(surface_x, surface_y);
 
                         self.position = (surface_x, surface_y);
                         change_pointer(pointer, inner, self.location, Some(serial))
@@ -100,25 +91,21 @@ impl PointerUserData {
                 if self.above_decorations {
                     self.position = (surface_x, surface_y);
 
-                    let surface_size = if let Some(decoration) = inner.decoration.as_ref() {
-                        decoration.surface_size
-                    } else {
-                        (0, 0)
-                    };
-
-                    let newpos = precise_location(buttons, surface_size, surface_x, surface_y);
-                    if newpos != self.location {
-                        match (newpos, self.location) {
-                            (Location::Button(_), _) | (_, Location::Button(_)) => {
-                                // pointer movement involves a button, request refresh
-                                (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                    if let Some(decoration) = inner.decoration.as_ref() {
+                        let newpos = decoration.precise_location(surface_x, surface_y);
+                        if newpos != self.location {
+                            match (newpos, self.location) {
+                                (Location::Button(_), _) | (_, Location::Button(_)) => {
+                                    // pointer movement involves a button, request refresh
+                                    (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                                }
+                                _ => (),
                             }
-                            _ => (),
+                            // we changed of part of the decoration, pointer image
+                            // may need to be changed
+                            self.location = newpos;
+                            change_pointer(pointer, inner, self.location, None)
                         }
-                        // we changed of part of the decoration, pointer image
-                        // may need to be changed
-                        self.location = newpos;
-                        change_pointer(pointer, inner, self.location, None)
                     }
                 }
             }
