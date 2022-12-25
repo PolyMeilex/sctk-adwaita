@@ -58,11 +58,11 @@ impl DecorationRenderer {
         }
 
         if buttons.close.x() > self.x {
-            buttons.close.draw_close(scale, colors, mouses, pixmap);
+            buttons.draw_close(scale, colors, mouses, pixmap);
         }
 
         if buttons.maximize.x() > self.x {
-            buttons.maximize.draw_maximize(
+            buttons.draw_maximize(
                 scale,
                 colors,
                 mouses,
@@ -73,9 +73,7 @@ impl DecorationRenderer {
         }
 
         if buttons.minimize.x() > self.x {
-            buttons
-                .minimize
-                .draw_minimize(scale, colors, mouses, pixmap);
+            buttons.draw_minimize(scale, colors, mouses, pixmap);
         }
     }
 }

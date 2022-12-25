@@ -39,7 +39,7 @@ impl Button {
     }
 }
 
-impl Button {
+impl Buttons {
     pub fn draw_minimize(
         &self,
         scale: f32,
@@ -47,16 +47,18 @@ impl Button {
         mouses: &[Location],
         pixmap: &mut PixmapMut,
     ) -> SkiaResult {
+        let button = &self.minimize;
+
         let btn_state = if mouses.contains(&Location::Button(ButtonKind::Minimize)) {
             ButtonState::Hovered
         } else {
             ButtonState::Idle
         };
 
-        let radius = self.radius();
+        let radius = button.radius();
 
-        let x = self.center_x();
-        let y = self.center_y();
+        let x = button.center_x();
+        let y = button.center_y();
 
         let circle = PathBuilder::from_circle(x, y, radius)?;
 
@@ -98,6 +100,8 @@ impl Button {
         is_maximized: bool,
         pixmap: &mut PixmapMut,
     ) -> SkiaResult {
+        let button = &self.maximize;
+
         let btn_state = if !maximizable {
             ButtonState::Disabled
         } else if mouses
@@ -109,10 +113,10 @@ impl Button {
             ButtonState::Idle
         };
 
-        let radius = self.radius();
+        let radius = button.radius();
 
-        let x = self.center_x();
-        let y = self.center_y();
+        let x = button.center_x();
+        let y = button.center_y();
 
         let path1 = {
             let mut pb = PathBuilder::new();
@@ -177,6 +181,8 @@ impl Button {
         mouses: &[Location],
         pixmap: &mut PixmapMut,
     ) -> SkiaResult {
+        let button = &self.close;
+
         // Draw the close button
         let btn_state = if mouses
             .iter()
@@ -187,10 +193,10 @@ impl Button {
             ButtonState::Idle
         };
 
-        let radius = self.radius();
+        let radius = button.radius();
 
-        let x = self.center_x();
-        let y = self.center_y();
+        let x = button.center_x();
+        let y = button.center_y();
 
         let path1 = {
             let mut pb = PathBuilder::new();
