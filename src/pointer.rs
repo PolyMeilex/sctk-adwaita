@@ -13,11 +13,15 @@ use smithay_client_toolkit::{
 
 use crate::{
     buttons::{ButtonKind, Buttons},
-    parts::DecorationPartKind,
-    precise_location, precise_location_b,
+    precise_location,
     theme::{BORDER_SIZE, HEADER_SIZE},
     Inner, Location,
 };
+
+enum DecorationPartKind {
+    None,
+    Header,
+}
 
 pub(crate) struct PointerUserData {
     pub location: Location,
@@ -62,9 +66,13 @@ impl PointerUserData {
                     if decoration.surface == surface {
                         self.current_surface = DecorationPartKind::Header;
 
-                        self.location =
-                            precise_location_b(buttons, inner.size.0, surface_x, surface_y);
-                        self.current_surface = inner.parts.find_decoration_part(&surface);
+                        self.location = precise_location(
+                            buttons,
+                            inner.size.0,
+                            inner.size.1,
+                            surface_x,
+                            surface_y,
+                        );
                         self.position = (surface_x, surface_y);
                         change_pointer(pointer, inner, self.location, Some(serial))
                     } else {
@@ -93,7 +101,8 @@ impl PointerUserData {
                 ..
             } => {
                 self.position = (surface_x, surface_y);
-                let newpos = precise_location_b(buttons, inner.size.0, surface_x, surface_y);
+                let newpos =
+                    precise_location(buttons, inner.size.0, inner.size.1, surface_x, surface_y);
                 if newpos != self.location {
                     match (newpos, self.location) {
                         (Location::Button(_), _) | (_, Location::Button(_)) => {

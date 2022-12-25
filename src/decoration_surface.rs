@@ -11,12 +11,13 @@ use smithay_client_toolkit::{
     shm::AutoMemPool,
     window::FrameRequest,
 };
-use tiny_skia::{Color, PixmapMut, Rect, Transform};
+use tiny_skia::{Color, PixmapMut};
 
 use crate::{
     buttons::Buttons,
     surface,
     theme::{ColorMap, BORDER_SIZE, HEADER_SIZE},
+    title::TitleText,
     Inner, Location,
 };
 
@@ -88,7 +89,17 @@ impl DecorationSurface {
         colors: &ColorMap,
         buttons: &Buttons,
         mouses: &[Location],
+        maximizable: bool,
+        is_maximized: bool,
+        mut title_text: Option<&mut TitleText>,
     ) {
+        let scale = self.scale();
+
+        if let Some(title_text) = title_text.as_mut() {
+            title_text.update_scale(scale);
+            title_text.update_color(colors.font_color);
+        }
+
         if let Ok((canvas, buffer)) = pool.buffer(
             self.surface_size.0 as i32,
             self.surface_size.1 as i32,
@@ -109,23 +120,39 @@ impl DecorationSurface {
                 crate::draw_decoration_background(
                     &mut pixmap,
                     scale,
-                    margin_h,
-                    margin_v,
-                    self.window_size.0 as f32 + 1.0,
-                    self.window_size.1 as f32 + header_height as f32,
+                    (margin_h, margin_v),
+                    (
+                        self.window_size.0 as f32 + 1.0,
+                        self.window_size.1 as f32 + header_height as f32,
+                    ),
                     colors,
                     false,
                     false,
                 );
+
+                if let Some(text_pixmap) = title_text.and_then(|t| t.pixmap()) {
+                    crate::draw_title(
+                        &mut pixmap,
+                        text_pixmap,
+                        (margin_h, margin_v),
+                        (header_width, header_height),
+                        buttons,
+                    );
+                }
 
                 if buttons.close.x() > margin_h {
                     buttons.close.draw_close(scale, colors, mouses, &mut pixmap);
                 }
 
                 if buttons.maximize.x() > margin_h {
-                    buttons
-                        .maximize
-                        .draw_maximize(scale, colors, mouses, true, false, &mut pixmap);
+                    buttons.maximize.draw_maximize(
+                        scale,
+                        colors,
+                        mouses,
+                        maximizable,
+                        is_maximized,
+                        &mut pixmap,
+                    );
                 }
 
                 if buttons.minimize.x() > margin_h {
@@ -138,6 +165,7 @@ impl DecorationSurface {
             self.surface.attach(Some(&buffer), 0, 0);
         }
 
+        // TODO: Damage
         self.surface.damage(0, 0, i32::MAX, i32::MAX);
         self.surface.commit();
     }

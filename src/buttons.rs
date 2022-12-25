@@ -325,17 +325,17 @@ impl Buttons {
         }
     }
 
-    pub fn find_button(&self, x: f64, y: f64) -> Location {
+    pub fn find_button(&self, x: f64, y: f64) -> Option<ButtonKind> {
         let x = x as f32 * self.scale as f32;
         let y = y as f32 * self.scale as f32;
         if self.close.contains(x, y) {
-            Location::Button(ButtonKind::Close)
+            Some(ButtonKind::Close)
         } else if self.maximize.contains(x, y) {
-            Location::Button(ButtonKind::Maximize)
+            Some(ButtonKind::Maximize)
         } else if self.minimize.contains(x, y) {
-            Location::Button(ButtonKind::Minimize)
+            Some(ButtonKind::Minimize)
         } else {
-            Location::Head
+            None
         }
     }
 
