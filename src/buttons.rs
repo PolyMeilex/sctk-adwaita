@@ -3,7 +3,7 @@ use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 use crate::{
     theme::{ColorMap, BORDER_SIZE},
-    Location, SkiaResult,
+    utils, Location, SkiaResult,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -37,8 +37,8 @@ impl Button {
         self.y + self.radius()
     }
 
-    fn contains(&self, x: f32, y: f32) -> bool {
-        x > self.x && x < self.x + self.size && y > self.y && y < self.y + self.size
+    fn contains(&self, x: f64, y: f64) -> bool {
+        utils::HitBox::new_f32(self.x, self.y, self.size, self.size).contains(x, y)
     }
 }
 
@@ -326,8 +326,8 @@ impl Buttons {
     }
 
     pub fn find_button(&self, x: f64, y: f64) -> Option<ButtonKind> {
-        let x = x as f32 * self.scale as f32;
-        let y = y as f32 * self.scale as f32;
+        let x = x * self.scale as f64;
+        let y = y * self.scale as f64;
         if self.close.contains(x, y) {
             Some(ButtonKind::Close)
         } else if self.maximize.contains(x, y) {

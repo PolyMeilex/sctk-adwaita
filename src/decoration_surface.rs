@@ -26,7 +26,7 @@ pub(crate) struct DecorationSurface {
     pub surface: WlSurface,
     subsurface: WlSubsurface,
     window_size: (u32, u32),
-    surface_size: (u32, u32),
+    pub surface_size: (u32, u32),
 }
 
 impl DecorationSurface {
@@ -109,7 +109,7 @@ impl DecorationSurface {
             if let Some(mut pixmap) =
                 PixmapMut::from_bytes(canvas, self.surface_size.0, self.surface_size.1)
             {
-                pixmap.fill(Color::TRANSPARENT);
+                pixmap.fill(Color::WHITE);
 
                 let (header_width, header_height) = buttons.scaled_size();
 

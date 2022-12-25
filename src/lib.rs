@@ -5,6 +5,7 @@ mod pointer;
 mod surface;
 pub mod theme;
 mod title;
+mod utils;
 
 use crate::theme::ColorMap;
 use buttons::{ButtonKind, Buttons};
@@ -289,6 +290,10 @@ impl Frame for AdwaitaFrame {
     fn redraw(&mut self) {
         let inner = &mut *self.inner.borrow_mut();
 
+        if let Some(decor) = inner.decoration.as_ref() {
+            self.buttons.borrow_mut().update_scale(decor.scale());
+        }
+
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.hidden || inner.fullscreened {
             if let Some(decor) = inner.decoration.as_mut() {
@@ -532,15 +537,27 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
     pb.finish()
 }
 
-fn precise_location(buttons: &Buttons, width: u32, height: u32, x: f64, y: f64) -> Location {
+fn precise_location(buttons: &Buttons, (width, height): (u32, u32), x: f64, y: f64) -> Location {
     match buttons.find_button(x, y) {
         Some(button) => Location::Button(button),
         None => {
-            let is_top = y <= BORDER_SIZE as f64;
-            let is_bottom = y >= height as f64;
+            let top_border = utils::HitBox::new(0.0, 0.0, width as f64, BORDER_SIZE as f64);
+            let bottom_border = utils::HitBox::new(
+                0.0,
+                height as f64 - BORDER_SIZE as f64,
+                width as f64,
+                BORDER_SIZE as f64,
+            );
 
-            let is_left = x <= BORDER_SIZE as f64;
-            let is_right = x >= f64::from(BORDER_SIZE + width);
+            let left_border = utils::HitBox::new(0.0, 0.0, BORDER_SIZE as f64, height as f64);
+            let right_border =
+                utils::HitBox::new(width as f64 - 5.0, 0.0, BORDER_SIZE as f64, height as f64);
+
+            let is_top = top_border.contains(x, y);
+            let is_bottom = bottom_border.contains(x, y);
+
+            let is_left = left_border.contains(x, y);
+            let is_right = right_border.contains(x, y);
 
             if is_top {
                 if is_left {
@@ -558,9 +575,9 @@ fn precise_location(buttons: &Buttons, width: u32, height: u32, x: f64, y: f64) 
                 } else {
                     Location::Bottom
                 }
-            } else if x < f64::from(BORDER_SIZE) {
+            } else if is_left {
                 Location::Left
-            } else if x > f64::from(width) {
+            } else if is_right {
                 Location::Right
             } else {
                 Location::Head

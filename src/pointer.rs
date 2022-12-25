@@ -18,14 +18,9 @@ use crate::{
     Inner, Location,
 };
 
-enum DecorationPartKind {
-    None,
-    Header,
-}
-
 pub(crate) struct PointerUserData {
     pub location: Location,
-    current_surface: DecorationPartKind,
+    above_decorations: bool,
 
     position: (f64, f64),
     pub seat: WlSeat,
@@ -38,7 +33,7 @@ impl PointerUserData {
     pub fn new(seat: WlSeat) -> Self {
         Self {
             location: Location::None,
-            current_surface: DecorationPartKind::None,
+            above_decorations: false,
             position: (0.0, 0.0),
             seat,
             last_click: None,
@@ -64,22 +59,24 @@ impl PointerUserData {
             } => {
                 if let Some(decoration) = inner.decoration.as_ref() {
                     if decoration.surface == surface {
-                        self.current_surface = DecorationPartKind::Header;
+                        self.above_decorations = true;
 
                         self.location = precise_location(
                             buttons,
-                            inner.size.0,
-                            inner.size.1,
+                            decoration.surface_size,
+                            // inner.size.0,
+                            // inner.size.1,
                             surface_x,
                             surface_y,
                         );
+
                         self.position = (surface_x, surface_y);
                         change_pointer(pointer, inner, self.location, Some(serial))
                     } else {
-                        self.current_surface = DecorationPartKind::None;
+                        self.above_decorations = false;
                     }
                 } else {
-                    self.current_surface = DecorationPartKind::None;
+                    self.above_decorations = false;
                 }
             }
             Event::Leave {
@@ -87,7 +84,7 @@ impl PointerUserData {
             } => {
                 if let Some(decoration) = inner.decoration.as_ref() {
                     if decoration.surface == surface {
-                        self.current_surface = DecorationPartKind::None;
+                        self.above_decorations = false;
                         self.location = Location::None;
 
                         change_pointer(pointer, inner, self.location, Some(serial));
@@ -100,21 +97,29 @@ impl PointerUserData {
                 surface_y,
                 ..
             } => {
-                self.position = (surface_x, surface_y);
-                let newpos =
-                    precise_location(buttons, inner.size.0, inner.size.1, surface_x, surface_y);
-                if newpos != self.location {
-                    match (newpos, self.location) {
-                        (Location::Button(_), _) | (_, Location::Button(_)) => {
-                            // pointer movement involves a button, request refresh
-                            (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                if self.above_decorations {
+                    self.position = (surface_x, surface_y);
+
+                    let surface_size = if let Some(decoration) = inner.decoration.as_ref() {
+                        decoration.surface_size
+                    } else {
+                        (0, 0)
+                    };
+
+                    let newpos = precise_location(buttons, surface_size, surface_x, surface_y);
+                    if newpos != self.location {
+                        match (newpos, self.location) {
+                            (Location::Button(_), _) | (_, Location::Button(_)) => {
+                                // pointer movement involves a button, request refresh
+                                (inner.implem)(FrameRequest::Refresh, 0, ddata);
+                            }
+                            _ => (),
                         }
-                        _ => (),
+                        // we changed of part of the decoration, pointer image
+                        // may need to be changed
+                        self.location = newpos;
+                        change_pointer(pointer, inner, self.location, None)
                     }
-                    // we changed of part of the decoration, pointer image
-                    // may need to be changed
-                    self.location = newpos;
-                    change_pointer(pointer, inner, self.location, None)
                 }
             }
             Event::Button {
