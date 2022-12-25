@@ -131,6 +131,7 @@ impl DecorationSurface {
         }
 
         let surface_size = self.surface_size();
+        let surface_size = (surface_size.0 * scale, surface_size.1 * scale);
 
         if let Ok((canvas, buffer)) = pool.buffer(
             surface_size.0 as i32,
@@ -143,7 +144,7 @@ impl DecorationSurface {
                 let (x, y) = if self.maximized {
                     (0, 0)
                 } else {
-                    (BORDER_SIZE, BORDER_SIZE)
+                    (BORDER_SIZE * scale, BORDER_SIZE * scale)
                 };
 
                 self.buttons.arrange((x, y), self.surface_size().0, scale);
@@ -151,7 +152,7 @@ impl DecorationSurface {
                 crate::renderer::DecorationRenderer {
                     x: x as f32,
                     y: y as f32,
-                    scale: scale as f32,
+                    scale,
                     window_size: self.window_size,
                     maximized: self.maximized,
                     tiled: self.tiled,

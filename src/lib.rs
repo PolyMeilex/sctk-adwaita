@@ -420,7 +420,7 @@ fn draw_decoration_background(
     pixmap: &mut PixmapMut,
     scale: f32,
     (margin_h, margin_v): (f32, f32),
-    (width, height): (f32, f32),
+    (width, height): (u32, u32),
     colors: &ColorMap,
     is_maximized: bool,
     tiled: bool,
@@ -431,10 +431,19 @@ fn draw_decoration_background(
         10.0 * scale
     };
 
-    let margin_h = margin_h - 1.0;
+    let width = width as f32;
+    let height = height as f32;
+
+    let margin_h = margin_h - 1.0 * scale;
 
     let bg = rounded_headerbar_shape(margin_h, margin_v, width, height, radius)?;
-    let header = rounded_headerbar_shape(margin_h, margin_v, width, HEADER_SIZE as f32, radius)?;
+    let header = rounded_headerbar_shape(
+        margin_h,
+        margin_v,
+        width,
+        HEADER_SIZE as f32 * scale,
+        radius,
+    )?;
 
     pixmap.fill_path(
         &header,
@@ -447,7 +456,10 @@ fn draw_decoration_background(
     pixmap.stroke_path(
         &bg,
         &colors.border_paint(),
-        &Stroke::default(),
+        &Stroke {
+            width: 1.0,
+            ..Default::default()
+        },
         Transform::identity(),
         None,
     );

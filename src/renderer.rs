@@ -11,7 +11,7 @@ use crate::{
 pub(crate) struct DecorationRenderer {
     pub x: f32,
     pub y: f32,
-    pub scale: f32,
+    pub scale: u32,
     pub window_size: (u32, u32),
     pub maximized: bool,
     pub tiled: bool,
@@ -30,17 +30,18 @@ impl DecorationRenderer {
         pixmap.fill(Color::TRANSPARENT);
 
         let header_height = HEADER_SIZE * self.scale as u32;
-        let header_width = self.window_size.0;
+        let header_width = self.window_size.0 * self.scale as u32;
 
         let scale = self.scale;
 
         crate::draw_decoration_background(
             pixmap,
-            scale,
+            scale as f32,
             (self.x, self.y),
+            #[allow(clippy::identity_op)]
             (
-                self.window_size.0 as f32 + 1.0,
-                self.window_size.1 as f32 + header_height as f32,
+                self.window_size.0 * scale + 1 * scale,
+                self.window_size.1 * scale + header_height,
             ),
             colors,
             self.maximized,
@@ -58,12 +59,12 @@ impl DecorationRenderer {
         }
 
         if buttons.close.x() > self.x {
-            buttons.draw_close(scale, colors, mouses, pixmap);
+            buttons.draw_close(scale as f32, colors, mouses, pixmap);
         }
 
         if buttons.maximize.x() > self.x {
             buttons.draw_maximize(
-                scale,
+                scale as f32,
                 colors,
                 mouses,
                 self.resizable,
@@ -73,7 +74,7 @@ impl DecorationRenderer {
         }
 
         if buttons.minimize.x() > self.x {
-            buttons.draw_minimize(scale, colors, mouses, pixmap);
+            buttons.draw_minimize(scale as f32, colors, mouses, pixmap);
         }
     }
 }

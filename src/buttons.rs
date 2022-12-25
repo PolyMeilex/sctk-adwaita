@@ -294,8 +294,8 @@ impl Buttons {
         self.scale = scale;
 
         let scale = self.scale as f32;
-        let margin_vertical = margin_v as f32 * scale;
-        let margin_horizontal = margin_h as f32 * scale;
+        let margin_vertical = margin_v as f32;
+        let margin_horizontal = margin_h as f32;
 
         let margin = 5.0 * scale;
         let spacing = 13.0 * scale;
