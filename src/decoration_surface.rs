@@ -15,7 +15,7 @@ use tiny_skia::PixmapMut;
 
 use crate::{
     buttons::Buttons,
-    surface,
+    renderer, surface,
     theme::{ColorMap, BORDER_SIZE, HEADER_SIZE},
     title::TitleText,
     utils, Inner, Location,
@@ -139,7 +139,8 @@ impl DecorationSurface {
             4 * surface_size.0 as i32,
             wl_shm::Format::Argb8888,
         ) {
-            if let Some(mut pixmap) = PixmapMut::from_bytes(canvas, surface_size.0, surface_size.1)
+            if let Some(mut pixmap) =
+                PixmapMut::from_bytes(canvas, surface_size.0, surface_size.1)
             {
                 let (x, y) = if self.maximized {
                     (0, 0)
@@ -147,18 +148,23 @@ impl DecorationSurface {
                     (BORDER_SIZE * scale, BORDER_SIZE * scale)
                 };
 
-                self.buttons.arrange((x, y), self.surface_size().0, scale);
-
-                crate::renderer::DecorationRenderer {
-                    x: x as f32,
-                    y: y as f32,
-                    scale,
-                    window_size: self.window_size,
-                    maximized: self.maximized,
-                    tiled: self.tiled,
-                    resizable: self.resizable,
-                }
-                .render(&mut pixmap, &self.buttons, colors, title_text, mouses);
+                renderer::render(
+                    &mut pixmap,
+                    &mut self.buttons,
+                    colors,
+                    title_text,
+                    mouses,
+                    renderer::RenderData {
+                        x: x as f32,
+                        y: y as f32,
+                        scale,
+                        window_size: self.window_size,
+                        surface_size,
+                        maximized: self.maximized,
+                        tiled: self.tiled,
+                        resizable: self.resizable,
+                    },
+                );
             }
 
             self.surface.attach(Some(&buffer), 0, 0);

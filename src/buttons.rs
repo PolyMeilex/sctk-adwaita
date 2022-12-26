@@ -270,8 +270,6 @@ pub(crate) struct Buttons {
     pub maximize: Button,
     pub minimize: Button,
 
-    w: u32,
-
     scale: u32,
 }
 
@@ -282,15 +280,12 @@ impl Default for Buttons {
             maximize: Default::default(),
             minimize: Default::default(),
             scale: 1,
-
-            w: 0,
         }
     }
 }
 
 impl Buttons {
     pub fn arrange(&mut self, (margin_h, margin_v): (u32, u32), w: u32, scale: u32) {
-        self.w = w;
         self.scale = scale;
 
         let scale = self.scale as f32;
@@ -301,7 +296,7 @@ impl Buttons {
         let spacing = 13.0 * scale;
         let size = 12.0 * 2.0 * scale;
 
-        let mut x = w as f32 * scale - margin - margin_horizontal;
+        let mut x = w as f32 - margin - margin_horizontal;
         let y = margin + margin_vertical;
 
         x -= size;

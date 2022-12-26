@@ -8,8 +8,7 @@ pub mod theme;
 mod title;
 mod utils;
 
-use crate::theme::ColorMap;
-use buttons::{ButtonKind, Buttons};
+use buttons::ButtonKind;
 use client::{
     protocol::{wl_compositor, wl_seat, wl_shm, wl_subcompositor, wl_surface},
     Attached, DispatchData,
@@ -24,10 +23,6 @@ use smithay_client_toolkit::{
 };
 use std::{cell::RefCell, fmt, rc::Rc};
 use theme::{ColorTheme, HEADER_SIZE};
-use tiny_skia::{
-    ClipMask, FillRule, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point, Rect, Stroke,
-    Transform,
-};
 use title::TitleText;
 
 type SkiaResult = Option<()>;
@@ -359,178 +354,4 @@ impl Drop for AdwaitaFrame {
             }
         }
     }
-}
-
-fn draw_title(
-    pixmap: &mut PixmapMut,
-    text_pixmap: &Pixmap,
-    (margin_h, margin_v): (f32, f32),
-    (header_w, header_h): (u32, u32),
-    buttons: &Buttons,
-) {
-    let canvas_w = pixmap.width() as f32;
-    let canvas_h = pixmap.height() as f32;
-
-    let header_w = header_w as f32;
-    let header_h = header_h as f32;
-
-    let text_w = text_pixmap.width() as f32;
-    let text_h = text_pixmap.height() as f32;
-
-    let x = header_w / 2.0 - text_w / 2.0;
-    let y = header_h / 2.0 - text_h / 2.0;
-
-    let x = margin_h + x;
-    let y = margin_v + y;
-
-    let (x, y) = if x + text_w < buttons.minimize.x() - 10.0 {
-        (x, y)
-    } else {
-        let y = header_h / 2.0 - text_h / 2.0;
-
-        let x = buttons.minimize.x() - text_w - 10.0;
-        let y = margin_v + y;
-        (x, y)
-    };
-
-    let x = x.max(margin_h + 5.0);
-
-    if let Some(clip) = Rect::from_xywh(0.0, 0.0, buttons.minimize.x() - 10.0, canvas_h) {
-        let mut mask = ClipMask::new();
-        mask.set_path(
-            canvas_w as u32,
-            canvas_h as u32,
-            &PathBuilder::from_rect(clip),
-            FillRule::Winding,
-            false,
-        );
-
-        pixmap.draw_pixmap(
-            x as i32,
-            y as i32,
-            text_pixmap.as_ref(),
-            &PixmapPaint::default(),
-            Transform::identity(),
-            Some(&mask),
-        );
-    }
-}
-
-fn draw_decoration_background(
-    pixmap: &mut PixmapMut,
-    scale: f32,
-    (margin_h, margin_v): (f32, f32),
-    (width, height): (u32, u32),
-    colors: &ColorMap,
-    is_maximized: bool,
-    tiled: bool,
-) -> SkiaResult {
-    let radius = if is_maximized || tiled {
-        0.0
-    } else {
-        10.0 * scale
-    };
-
-    let width = width as f32;
-    let height = height as f32;
-
-    let margin_h = margin_h - 1.0 * scale;
-
-    let bg = rounded_headerbar_shape(margin_h, margin_v, width, height, radius)?;
-    let header = rounded_headerbar_shape(
-        margin_h,
-        margin_v,
-        width,
-        HEADER_SIZE as f32 * scale,
-        radius,
-    )?;
-
-    pixmap.fill_path(
-        &header,
-        &colors.headerbar_paint(),
-        FillRule::Winding,
-        Transform::identity(),
-        None,
-    );
-
-    pixmap.stroke_path(
-        &bg,
-        &colors.border_paint(),
-        &Stroke {
-            width: 1.0,
-            ..Default::default()
-        },
-        Transform::identity(),
-        None,
-    );
-
-    Some(())
-}
-
-fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Option<Path> {
-    use std::f32::consts::FRAC_1_SQRT_2;
-
-    let mut pb = PathBuilder::new();
-    let mut cursor = Point::from_xy(x, y);
-
-    // !!!
-    // This code is heavily "inspired" by https://gitlab.com/snakedye/snui/
-    // So technically it should be licensed under MPL-2.0, sorry about that 🥺 👉👈
-    // !!!
-
-    // Positioning the cursor
-    cursor.y += radius;
-    pb.move_to(cursor.x, cursor.y);
-
-    // Drawing the outline
-    pb.cubic_to(
-        cursor.x,
-        cursor.y,
-        cursor.x,
-        cursor.y - FRAC_1_SQRT_2 * radius,
-        {
-            cursor.x += radius;
-            cursor.x
-        },
-        {
-            cursor.y -= radius;
-            cursor.y
-        },
-    );
-    pb.line_to(
-        {
-            cursor.x = x + width - radius;
-            cursor.x
-        },
-        cursor.y,
-    );
-    pb.cubic_to(
-        cursor.x,
-        cursor.y,
-        cursor.x + FRAC_1_SQRT_2 * radius,
-        cursor.y,
-        {
-            cursor.x += radius;
-            cursor.x
-        },
-        {
-            cursor.y += radius;
-            cursor.y
-        },
-    );
-    pb.line_to(cursor.x, {
-        cursor.y = y + height;
-        cursor.y
-    });
-    pb.line_to(
-        {
-            cursor.x = x;
-            cursor.x
-        },
-        cursor.y,
-    );
-
-    pb.close();
-
-    pb.finish()
 }
