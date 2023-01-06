@@ -36,6 +36,11 @@ impl FontPreference {
                     _ => None,
                 }
             }
+            Some((head, tail)) if !head.is_empty() => Some(Self {
+                name: head.into(),
+                style: Some(tail.into()),
+                pt_size: 10.0,
+            }),
             None if !conf.is_empty() => Some(Self {
                 name: conf.into(),
                 style: None,
@@ -75,5 +80,12 @@ fn pref_from_name() {
     let pref = FontPreference::from_name_style_size("Cantarell").unwrap();
     assert_eq!(pref.name, "Cantarell");
     assert_eq!(pref.style, None);
+    assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
+}
+#[test]
+fn pref_from_multi_name_style() {
+    let pref = FontPreference::from_name_style_size("Foo Bar Baz Bold").unwrap();
+    assert_eq!(pref.name, "Foo Bar Baz");
+    assert_eq!(pref.style, Some("Bold".into()));
     assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
 }
