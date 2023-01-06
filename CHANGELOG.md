@@ -1,6 +1,7 @@
 ## Unreleased (0.5.3)
 - `ab_glyph` titles will read the system title font using memory mapped buffers instead of reading to heap.
-   Lowers RAM usage.
+  Lowers RAM usage.
+- Improve titlebar-font config parsing to correctly handle more font names.
 
 ## 0.5.2
 - `ab_glyph` & `crossfont` titles will use gnome "titlebar-font" config if available.
