@@ -138,7 +138,7 @@ impl Button {
         );
 
         let path2 = {
-            let size = 8.0 * scale as f32;
+            let size = 8.0 * scale;
             let hsize = size / 2.0;
             let mut pb = PathBuilder::new();
 
@@ -163,7 +163,7 @@ impl Button {
             &path2,
             &button_icon_paint,
             &Stroke {
-                width: 1.0 * scale as f32,
+                width: 1.0 * scale,
                 ..Default::default()
             },
             Transform::identity(),
@@ -216,7 +216,7 @@ impl Button {
         );
 
         let x_icon = {
-            let size = 3.5 * scale as f32;
+            let size = 3.5 * scale;
             let mut pb = PathBuilder::new();
 
             {
@@ -250,7 +250,7 @@ impl Button {
             &x_icon,
             &button_icon_paint,
             &Stroke {
-                width: 1.1 * scale as f32,
+                width: 1.1 * scale,
                 ..Default::default()
             },
             Transform::identity(),
@@ -340,6 +340,6 @@ impl Buttons {
     }
 
     pub fn scaled_size(&self) -> (u32, u32) {
-        (self.w * self.scale as u32, self.h * self.scale as u32)
+        (self.w * self.scale, self.h * self.scale)
     }
 }

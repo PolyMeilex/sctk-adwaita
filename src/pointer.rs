@@ -198,7 +198,7 @@ fn lmb_press(
 fn lmb_release(pointer_data: &mut PointerUserData, maximized: bool) -> Option<FrameRequest> {
     let lpm_grab = pointer_data.lpm_grab.take();
 
-    let req = match pointer_data.location {
+    match pointer_data.location {
         Location::Button(btn) => {
             if lpm_grab == Some(btn) {
                 let req = match btn {
@@ -219,9 +219,7 @@ fn lmb_release(pointer_data: &mut PointerUserData, maximized: bool) -> Option<Fr
             }
         }
         _ => None,
-    };
-
-    req
+    }
 }
 
 fn rmb_press(pointer_data: &PointerUserData) -> Option<FrameRequest> {
