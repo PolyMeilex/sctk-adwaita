@@ -16,27 +16,42 @@ impl Default for FontPreference {
 }
 
 impl FontPreference {
-    /// Parse config string like `Cantarell 12` or `Cantarell Bold 11`.
+    /// Parse config string like `Cantarell 12`, `Cantarell Bold 11`, `Noto Serif CJK HK Bold 12`.
     pub fn from_name_style_size(conf: &str) -> Option<Self> {
-        let mut split = conf.split(' ');
-        let name = split.next()?;
-        let mut style = split.next();
-        let mut pt_size = split.next();
-        if let (Some(v), None) = (style, pt_size) {
-            if v.chars().all(|c| c.is_numeric() || c == '.') {
-                pt_size = Some(v);
-                style = None;
+        // assume last is size, 2nd last is style and the rest is name.
+        match conf.rsplit_once(' ') {
+            Some((head, tail)) if tail.chars().all(|c| c.is_numeric()) => {
+                let pt_size: f32 = tail.parse().unwrap_or(10.0);
+                match head.rsplit_once(' ') {
+                    Some((name, style)) if !name.is_empty() => Some(Self {
+                        name: name.into(),
+                        style: Some(style.into()),
+                        pt_size,
+                    }),
+                    None if !head.is_empty() => Some(Self {
+                        name: head.into(),
+                        style: None,
+                        pt_size,
+                    }),
+                    _ => None,
+                }
             }
+            None if !conf.is_empty() => Some(Self {
+                name: conf.into(),
+                style: None,
+                pt_size: 10.0,
+            }),
+            _ => None,
         }
-
-        let pt_size = pt_size.and_then(|p| p.parse().ok()).unwrap_or(10.0);
-
-        Some(Self {
-            name: name.into(),
-            style: style.map(|v| v.into()),
-            pt_size,
-        })
     }
+}
+
+#[test]
+fn pref_from_multi_name_variant_size() {
+    let pref = FontPreference::from_name_style_size("Noto Serif CJK HK Bold 12").unwrap();
+    assert_eq!(pref.name, "Noto Serif CJK HK");
+    assert_eq!(pref.style, Some("Bold".into()));
+    assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
 }
 
 #[test]
