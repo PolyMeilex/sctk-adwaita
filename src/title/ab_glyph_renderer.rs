@@ -1,13 +1,12 @@
-//! Title renderer using ab_glyph & Cantarell-Regular.ttf (SIL Open Font Licence v1.1).
+//! Title renderer using ab_glyph.
 //!
-//! Uses embedded font & requires no dynamically linked dependencies.
+//! Requires no dynamically linked dependencies.
+//!
+//! Can fallback to a embedded Cantarell-Regular.ttf font (SIL Open Font Licence v1.1)
+//! if the system font doesn't work.
 use crate::title::{config, font_preference::FontPreference};
-use ab_glyph::{point, Font, FontArc, FontVec, Glyph, PxScale, ScaleFont, VariableFont};
-use std::{
-    fs::File,
-    io::{BufReader, Read},
-    process::Command,
-};
+use ab_glyph::{point, Font, FontRef, Glyph, PxScale, PxScaleFont, ScaleFont, VariableFont};
+use std::{fs::File, process::Command};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 
 const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
@@ -15,7 +14,7 @@ const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
 #[derive(Debug)]
 pub struct AbGlyphTitleText {
     title: String,
-    font: FontArc,
+    font: Option<(memmap2::Mmap, FontPreference)>,
     original_px_size: f32,
     size: PxScale,
     color: Color,
@@ -25,24 +24,13 @@ pub struct AbGlyphTitleText {
 impl AbGlyphTitleText {
     pub fn new(color: Color) -> Self {
         let font_pref = config::titlebar_font().unwrap_or_default();
+        let font_pref_pt_size = font_pref.pt_size;
         let font = font_file_matching(&font_pref)
-            .and_then(read_to_vec)
-            .and_then(|data| {
-                let mut font = FontVec::try_from_vec(data).ok()?;
-                // basic "bold" handling for variable fonts
-                if font_pref
-                    .style
-                    .map_or(false, |s| s.eq_ignore_ascii_case("bold"))
-                {
-                    font.set_variation(b"wght", 700.0);
-                }
-                Some(FontArc::from(font))
-            })
-            // fallback to using embedded font if system font doesn't work
-            .unwrap_or_else(|| FontArc::try_from_slice(CANTARELL).unwrap());
+            .and_then(|f| mmap(&f))
+            .map(|mmap| (mmap, font_pref));
 
-        let size = font
-            .pt_to_px_scale(font_pref.pt_size)
+        let size = parse_font(&font)
+            .pt_to_px_scale(font_pref_pt_size)
             .expect("invalid font units_per_em");
 
         Self {
@@ -84,9 +72,10 @@ impl AbGlyphTitleText {
 
     /// Render returning the new `Pixmap`.
     fn render(&self) -> Option<Pixmap> {
-        let font = self.font.as_scaled(self.size);
+        let font = parse_font(&self.font);
+        let font = font.as_scaled(self.size);
 
-        let glyphs = self.layout();
+        let glyphs = self.layout(&font);
         let last_glyph = glyphs.last()?;
         let width = (last_glyph.position.x + font.h_advance(last_glyph.id)).ceil() as u32;
         let height = font.height().ceil() as u32;
@@ -96,7 +85,7 @@ impl AbGlyphTitleText {
         let pixels = pixmap.pixels_mut();
 
         for glyph in glyphs {
-            if let Some(outline) = self.font.outline_glyph(glyph) {
+            if let Some(outline) = font.outline_glyph(glyph) {
                 let bounds = outline.px_bounds();
                 let left = bounds.min.x as u32;
                 let top = bounds.min.y as u32;
@@ -120,9 +109,7 @@ impl AbGlyphTitleText {
     }
 
     /// Simple single-line glyph layout.
-    fn layout(&self) -> Vec<Glyph> {
-        let font = self.font.as_scaled(self.size);
-
+    fn layout(&self, font: &PxScaleFont<impl Font>) -> Vec<Glyph> {
         let mut caret = point(0.0, font.ascent());
         let mut last_glyph: Option<Glyph> = None;
         let mut target = Vec::new();
@@ -145,6 +132,28 @@ impl AbGlyphTitleText {
     }
 }
 
+/// Parse the memmapped system font or fallback to built-in cantarell.
+fn parse_font(sys_font: &Option<(memmap2::Mmap, FontPreference)>) -> FontRef<'_> {
+    match sys_font {
+        Some((mmap, font_pref)) => {
+            FontRef::try_from_slice(mmap)
+                .map(|mut f| {
+                    // basic "bold" handling for variable fonts
+                    if font_pref
+                        .style
+                        .as_deref()
+                        .map_or(false, |s| s.eq_ignore_ascii_case("bold"))
+                    {
+                        f.set_variation(b"wght", 700.0);
+                    }
+                    f
+                })
+                .unwrap_or_else(|_| FontRef::try_from_slice(CANTARELL).unwrap())
+        }
+        _ => FontRef::try_from_slice(CANTARELL).unwrap(),
+    }
+}
+
 /// Font-config without dynamically linked dependencies
 fn font_file_matching(pref: &FontPreference) -> Option<File> {
     let mut pattern = pref.name.clone();
@@ -162,8 +171,7 @@ fn font_file_matching(pref: &FontPreference) -> Option<File> {
         .and_then(|path| File::open(path.trim()).ok())
 }
 
-fn read_to_vec(file: File) -> Option<Vec<u8>> {
-    let mut data = Vec::new();
-    BufReader::new(file).read_to_end(&mut data).ok()?;
-    Some(data)
+fn mmap(file: &File) -> Option<memmap2::Mmap> {
+    // Safety: System font files are not expected to be mutated during use
+    unsafe { memmap2::Mmap::map(file).ok() }
 }

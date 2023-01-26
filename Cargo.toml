@@ -13,6 +13,7 @@ description = "Adwaita-like SCTK Frame"
 smithay-client-toolkit = "0.16"
 tiny-skia = { version = "0.8", features = ["std", "simd"] }
 log = "0.4"
+memmap2 = "0.5.8"
 
 # Draw title text using crossfont `--features crossfont`
 crossfont = { version = "0.5.0", features = ["force_system_fontconfig"], optional = true }
