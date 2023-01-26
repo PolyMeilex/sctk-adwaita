@@ -1,4 +1,4 @@
-## Unreleased (0.5.3)
+## 0.5.3
 - `ab_glyph` titles will read the system title font using memory mapped buffers instead of reading to heap.
   Lowers RAM usage.
 - Improve titlebar-font config parsing to correctly handle more font names.
