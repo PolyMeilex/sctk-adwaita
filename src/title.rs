@@ -47,7 +47,7 @@ impl TitleText {
         self.imp.update_scale(scale)
     }
 
-    pub fn update_title<S: Into<String>>(&mut self, title: S) {
+    pub fn update_title(&mut self, title: impl Into<String>) {
         self.imp.update_title(title)
     }
 

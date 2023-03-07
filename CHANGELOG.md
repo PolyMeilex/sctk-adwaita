@@ -1,3 +1,6 @@
+## Unreleased
+- Update the `smithay-client-toolkit` to `0.17.0`
+
 ## 0.5.4
 - Timeout dbus call to settings portal (100ms)
 

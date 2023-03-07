@@ -10,10 +10,10 @@ documentation = "https://docs.rs/sctk-adwaita"
 description = "Adwaita-like SCTK Frame"
 
 [dependencies]
-smithay-client-toolkit = "0.16"
+smithay-client-toolkit = { version = "0.17.0", default_features = false }
 tiny-skia = { version = "0.8", features = ["std", "simd"] }
 log = "0.4"
-memmap2 = "0.5.8"
+memmap2 = { version = "0.5.8", optional = true }
 
 # Draw title text using crossfont `--features crossfont`
 crossfont = { version = "0.5.0", features = ["force_system_fontconfig"], optional = true }
@@ -22,3 +22,5 @@ ab_glyph = { version = "0.2.17", optional = true }
 
 [features]
 default = ["ab_glyph"]
+crossfont = ["dep:crossfont"]
+ab_glyph = ["dep:ab_glyph", "memmap2"]
