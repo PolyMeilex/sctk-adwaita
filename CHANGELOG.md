@@ -1,3 +1,6 @@
+## 0.5.4
+- Timeout dbus call to settings portal (100ms)
+
 ## 0.5.3
 - `ab_glyph` titles will read the system title font using memory mapped buffers instead of reading to heap.
   Lowers RAM usage.
