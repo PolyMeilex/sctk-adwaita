@@ -1,144 +1,142 @@
-use std::{cell::RefCell, rc::Rc};
-
-use smithay_client_toolkit::{
-    reexports::client::{
-        protocol::{
-            wl_compositor::WlCompositor, wl_subcompositor::WlSubcompositor,
-            wl_subsurface::WlSubsurface, wl_surface::WlSurface,
-        },
-        Attached, DispatchData,
-    },
-    window::FrameRequest,
+use smithay_client_toolkit::reexports::client::{
+    protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
+    Dispatch, Proxy, QueueHandle,
 };
 
-use crate::{surface, Inner, Location};
+use smithay_client_toolkit::{
+    compositor::SurfaceData,
+    subcompositor::{SubcompositorState, SubsurfaceData},
+};
 
-pub enum DecorationPartKind {
-    Header,
-    Top,
-    Left,
-    Right,
-    Bottom,
-    None,
-}
+use crate::pointer::Location;
+use crate::theme::{BORDER_SIZE, HEADER_SIZE};
 
+/// The decoration's 'parts'.
 #[derive(Debug)]
-pub struct Decoration {
-    pub header: Part,
-
-    pub top: Part,
-    pub left: Part,
-    pub right: Part,
-    pub bottom: Part,
+pub struct DecorationParts {
+    parts: [Part; 5],
 }
 
-impl Decoration {
-    pub fn iter(&self) -> [&Part; 5] {
-        [
-            &self.header,
-            &self.top,
-            &self.left,
-            &self.right,
-            &self.bottom,
-        ]
+impl DecorationParts {
+    // XXX keep in sync with `Self;:new`.
+    pub const HEADER: usize = 0;
+    pub const TOP: usize = 1;
+    pub const LEFT: usize = 2;
+    pub const RIGHT: usize = 3;
+    pub const BOTTOM: usize = 4;
+
+    pub fn new<State>(
+        base_surface: &WlSurface,
+        subcompositor: &SubcompositorState,
+        queue_handle: &QueueHandle<State>,
+    ) -> Self
+    where
+        State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    {
+        // XXX the order must be in sync with associated constants.
+        let parts = [
+            // Header.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                0,
+                HEADER_SIZE,
+                (0, -(HEADER_SIZE as i32)),
+            ),
+            // Top.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                0,
+                BORDER_SIZE,
+                (
+                    -(BORDER_SIZE as i32),
+                    -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                ),
+            ),
+            // Left.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                BORDER_SIZE,
+                0,
+                (-(BORDER_SIZE as i32), -(HEADER_SIZE as i32)),
+            ),
+            // Right.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                BORDER_SIZE,
+                0,
+                (-(BORDER_SIZE as i32), -(HEADER_SIZE as i32)),
+            ),
+            // Bottom.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                0,
+                BORDER_SIZE,
+                (-(BORDER_SIZE as i32), 0),
+            ),
+        ];
+
+        Self { parts }
     }
 
-    pub fn hide_decoration(&self) {
-        for p in self.iter() {
-            p.surface.attach(None, 0, 0);
-            p.surface.commit();
+    pub fn parts(&self) -> std::iter::Enumerate<std::slice::Iter<Part>> {
+        self.parts.iter().enumerate()
+    }
+
+    pub fn hide(&self) {
+        for part in self.parts.iter() {
+            part.surface.attach(None, 0, 0);
+            part.surface.commit();
         }
     }
 
     pub fn hide_borders(&self) {
-        for p in self.iter().iter().skip(1) {
-            p.surface.attach(None, 0, 0);
-            p.surface.commit();
-        }
-    }
-}
-
-#[derive(Default, Debug)]
-pub(crate) struct Parts {
-    decoration: Option<Decoration>,
-}
-
-impl Parts {
-    pub fn add_decorations(
-        &mut self,
-        parent: &WlSurface,
-        compositor: &Attached<WlCompositor>,
-        subcompositor: &Attached<WlSubcompositor>,
-        inner: Rc<RefCell<Inner>>,
-    ) {
-        if self.decoration.is_none() {
-            let header = Part::new(parent, compositor, subcompositor, Some(inner));
-            let top = Part::new(parent, compositor, subcompositor, None);
-            let left = Part::new(parent, compositor, subcompositor, None);
-            let right = Part::new(parent, compositor, subcompositor, None);
-            let bottom = Part::new(parent, compositor, subcompositor, None);
-
-            self.decoration = Some(Decoration {
-                header,
-                top,
-                left,
-                right,
-                bottom,
-            });
+        for (_, part) in self.parts().filter(|(idx, _)| *idx != Self::HEADER) {
+            part.surface.attach(None, 0, 0);
+            part.surface.commit();
         }
     }
 
-    pub fn remove_decorations(&mut self) {
-        self.decoration = None;
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.parts[Self::HEADER].width = width;
+
+        self.parts[Self::BOTTOM].width = width + 2 * BORDER_SIZE;
+        self.parts[Self::BOTTOM].pos.1 = height as i32;
+
+        self.parts[Self::TOP].width = self.parts[Self::BOTTOM].width;
+
+        self.parts[Self::LEFT].height = height + HEADER_SIZE;
+
+        self.parts[Self::RIGHT].height = self.parts[Self::LEFT].height;
+        self.parts[Self::RIGHT].pos.0 = width as i32;
     }
 
-    pub fn hide_decorations(&self) {
-        if let Some(decor) = self.decoration.as_ref() {
-            decor.hide_decoration();
-        }
-    }
-
-    pub fn decoration(&self) -> Option<&Decoration> {
-        self.decoration.as_ref()
-    }
-
-    pub fn find_decoration_part(&self, surface: &WlSurface) -> DecorationPartKind {
-        if let Some(decor) = self.decoration() {
-            if surface.as_ref().equals(decor.header.surface.as_ref()) {
-                DecorationPartKind::Header
-            } else if surface.as_ref().equals(decor.top.surface.as_ref()) {
-                DecorationPartKind::Top
-            } else if surface.as_ref().equals(decor.bottom.surface.as_ref()) {
-                DecorationPartKind::Bottom
-            } else if surface.as_ref().equals(decor.left.surface.as_ref()) {
-                DecorationPartKind::Left
-            } else if surface.as_ref().equals(decor.right.surface.as_ref()) {
-                DecorationPartKind::Right
-            } else {
-                DecorationPartKind::None
-            }
-        } else {
-            DecorationPartKind::None
-        }
+    pub fn header(&self) -> &Part {
+        &self.parts[Self::HEADER]
     }
 
     pub fn find_surface(&self, surface: &WlSurface) -> Location {
-        if let Some(decor) = self.decoration() {
-            if surface.as_ref().equals(decor.header.surface.as_ref()) {
-                Location::Head
-            } else if surface.as_ref().equals(decor.top.surface.as_ref()) {
-                Location::Top
-            } else if surface.as_ref().equals(decor.bottom.surface.as_ref()) {
-                Location::Bottom
-            } else if surface.as_ref().equals(decor.left.surface.as_ref()) {
-                Location::Left
-            } else if surface.as_ref().equals(decor.right.surface.as_ref()) {
-                Location::Right
-            } else {
-                Location::None
-            }
-        } else {
-            Location::None
+        let pos = match self.parts.iter().position(|part| &part.surface == surface) {
+            Some(pos) => pos,
+            None => return Location::None,
+        };
+
+        match pos {
+            Self::HEADER => Location::Head,
+            Self::TOP => Location::Top,
+            Self::BOTTOM => Location::Bottom,
+            Self::LEFT => Location::Left,
+            Self::RIGHT => Location::Right,
+            _ => unreachable!(),
         }
     }
 }
@@ -147,46 +145,41 @@ impl Parts {
 pub struct Part {
     pub surface: WlSurface,
     pub subsurface: WlSubsurface,
+
+    pub width: u32,
+    pub height: u32,
+
+    pub pos: (i32, i32),
 }
 
 impl Part {
-    fn new(
+    fn new<State>(
         parent: &WlSurface,
-        compositor: &Attached<WlCompositor>,
-        subcompositor: &Attached<WlSubcompositor>,
-        inner: Option<Rc<RefCell<Inner>>>,
-    ) -> Part {
-        let surface = if let Some(inner) = inner {
-            surface::setup_surface(
-                compositor.create_surface(),
-                Some(move |dpi, surface: WlSurface, ddata: DispatchData| {
-                    surface.set_buffer_scale(dpi);
-                    surface.commit();
-                    (inner.borrow_mut().implem)(FrameRequest::Refresh, 0, ddata);
-                }),
-            )
-        } else {
-            surface::setup_surface(
-                compositor.create_surface(),
-                Some(move |dpi, surface: WlSurface, _ddata: DispatchData| {
-                    surface.set_buffer_scale(dpi);
-                    surface.commit();
-                }),
-            )
-        };
+        subcompositor: &SubcompositorState,
+        queue_handle: &QueueHandle<State>,
+        width: u32,
+        height: u32,
+        pos: (i32, i32),
+    ) -> Part
+    where
+        State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    {
+        let (subsurface, surface) = subcompositor.create_subsurface(parent.clone(), queue_handle);
 
-        let surface = surface.detach();
-
-        let subsurface = subcompositor.get_subsurface(&surface, parent);
+        // Sync with the parent surface.
+        subsurface.set_sync();
 
         Part {
             surface,
-            subsurface: subsurface.detach(),
+            subsurface,
+            width,
+            height,
+            pos,
         }
     }
 
     pub fn scale(&self) -> u32 {
-        surface::get_surface_scale_factor(&self.surface) as u32
+        self.surface.data::<SurfaceData>().unwrap().scale_factor() as u32
     }
 }
 

@@ -1,260 +1,143 @@
-use log::error;
+use std::time::{Duration, Instant};
+
 use smithay_client_toolkit::{
-    reexports::{
-        client::{
-            protocol::{wl_pointer, wl_seat::WlSeat},
-            DispatchData,
-        },
-        protocols::xdg_shell::client::xdg_toplevel::ResizeEdge,
+    reexports::protocols::xdg::shell::client::xdg_toplevel::ResizeEdge,
+    shell::xdg::{
+        frame::FrameAction,
+        window::{WindowManagerCapabilities, WindowState},
     },
-    seat::pointer::ThemedPointer,
-    window::FrameRequest,
 };
 
 use crate::{
-    buttons::{ButtonKind, Buttons},
-    parts::DecorationPartKind,
-    precise_location,
+    buttons::ButtonKind,
     theme::{BORDER_SIZE, HEADER_SIZE},
-    Inner, Location,
 };
 
-pub(crate) struct PointerUserData {
+/// Time to register the next click as a double click.
+const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(300);
+
+/// The state of the mouse input inside the decorations frame.
+#[derive(Debug, Default)]
+pub(crate) struct MouseState {
     pub location: Location,
-    current_surface: DecorationPartKind,
 
+    /// The surface local location inside the surface.
     position: (f64, f64),
-    pub seat: WlSeat,
-    last_click: Option<std::time::Instant>,
 
-    lpm_grab: Option<ButtonKind>,
+    /// The instant of the last click.
+    last_normal_click: Option<Instant>,
 }
 
-impl PointerUserData {
-    pub fn new(seat: WlSeat) -> Self {
-        Self {
-            location: Location::None,
-            current_surface: DecorationPartKind::None,
-            position: (0.0, 0.0),
-            seat,
-            last_click: None,
-            lpm_grab: None,
-        }
-    }
-
-    pub fn event(
+impl MouseState {
+    /// The normal click on decorations frame was made.
+    pub fn click(
         &mut self,
-        event: wl_pointer::Event,
-        inner: &mut Inner,
-        buttons: &Buttons,
-        pointer: &ThemedPointer,
-        ddata: DispatchData<'_>,
-    ) {
-        use wl_pointer::Event;
-        match event {
-            Event::Enter {
-                serial,
-                surface,
-                surface_x,
-                surface_y,
-            } => {
-                self.location = precise_location(
-                    buttons,
-                    inner.parts.find_surface(&surface),
-                    inner.size.0,
-                    surface_x,
-                    surface_y,
-                );
-                self.current_surface = inner.parts.find_decoration_part(&surface);
-                self.position = (surface_x, surface_y);
-                change_pointer(pointer, inner, self.location, Some(serial))
+        pressed: bool,
+        resizable: bool,
+        state: &WindowState,
+        wm_capabilities: &WindowManagerCapabilities,
+    ) -> Option<FrameAction> {
+        let maximized = state.contains(WindowState::MAXIMIZED);
+        let action = match self.location {
+            Location::Top if resizable => FrameAction::Resize(ResizeEdge::Top),
+            Location::TopLeft if resizable => FrameAction::Resize(ResizeEdge::TopLeft),
+            Location::Left if resizable => FrameAction::Resize(ResizeEdge::Left),
+            Location::BottomLeft if resizable => FrameAction::Resize(ResizeEdge::BottomLeft),
+            Location::Bottom if resizable => FrameAction::Resize(ResizeEdge::Bottom),
+            Location::BottomRight if resizable => FrameAction::Resize(ResizeEdge::BottomRight),
+            Location::Right if resizable => FrameAction::Resize(ResizeEdge::Right),
+            Location::TopRight if resizable => FrameAction::Resize(ResizeEdge::TopRight),
+            Location::Button(ButtonKind::Close) if !pressed => FrameAction::Close,
+            Location::Button(ButtonKind::Maximize) if !pressed && !maximized => {
+                FrameAction::Maximize
             }
-            Event::Leave { serial, .. } => {
-                self.current_surface = DecorationPartKind::None;
-
-                self.location = Location::None;
-                change_pointer(pointer, inner, self.location, Some(serial));
-                (inner.implem)(FrameRequest::Refresh, 0, ddata);
+            Location::Button(ButtonKind::Maximize) if !pressed && maximized => {
+                FrameAction::UnMaximize
             }
-            Event::Motion {
-                surface_x,
-                surface_y,
-                ..
-            } => {
-                self.position = (surface_x, surface_y);
-                let newpos =
-                    precise_location(buttons, self.location, inner.size.0, surface_x, surface_y);
-                if newpos != self.location {
-                    match (newpos, self.location) {
-                        (Location::Button(_), _) | (_, Location::Button(_)) => {
-                            // pointer movement involves a button, request refresh
-                            (inner.implem)(FrameRequest::Refresh, 0, ddata);
-                        }
-                        _ => (),
-                    }
-                    // we changed of part of the decoration, pointer image
-                    // may need to be changed
-                    self.location = newpos;
-                    change_pointer(pointer, inner, self.location, None)
-                }
-            }
-            Event::Button {
-                serial,
-                button,
-                state,
-                ..
-            } => {
-                let request = if state == wl_pointer::ButtonState::Pressed {
-                    match button {
-                        // Left mouse button.
-                        0x110 => lmb_press(self, inner.maximized, inner.resizable),
-                        // Right mouse button.
-                        0x111 => rmb_press(self),
-                        _ => None,
-                    }
-                } else {
-                    // Left mouse button.
-                    if button == 0x110 {
-                        lmb_release(self, inner.maximized)
-                    } else {
-                        None
-                    }
-                };
-
-                if let Some(request) = request {
-                    (inner.implem)(request, serial, ddata);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-fn lmb_press(
-    pointer_data: &mut PointerUserData,
-    maximized: bool,
-    resizable: bool,
-) -> Option<FrameRequest> {
-    match pointer_data.location {
-        Location::Top if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Top,
-        )),
-        Location::TopLeft if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::TopLeft,
-        )),
-        Location::Left if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Left,
-        )),
-        Location::BottomLeft if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::BottomLeft,
-        )),
-        Location::Bottom if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Bottom,
-        )),
-        Location::BottomRight if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::BottomRight,
-        )),
-        Location::Right if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::Right,
-        )),
-        Location::TopRight if resizable => Some(FrameRequest::Resize(
-            pointer_data.seat.clone(),
-            ResizeEdge::TopRight,
-        )),
-        Location::Head => {
-            let last_click = pointer_data.last_click.replace(std::time::Instant::now());
-
-            if let Some(last) = last_click {
-                if last.elapsed() < std::time::Duration::from_millis(400) {
-                    pointer_data.last_click = None;
-
-                    if maximized {
-                        Some(FrameRequest::UnMaximize)
-                    } else {
-                        Some(FrameRequest::Maximize)
-                    }
-                } else {
-                    Some(FrameRequest::Move(pointer_data.seat.clone()))
-                }
-            } else {
-                Some(FrameRequest::Move(pointer_data.seat.clone()))
-            }
-        }
-        Location::Button(btn) => {
-            pointer_data.lpm_grab = Some(btn);
-            None
-        }
-        _ => None,
-    }
-}
-
-fn lmb_release(pointer_data: &mut PointerUserData, maximized: bool) -> Option<FrameRequest> {
-    let lpm_grab = pointer_data.lpm_grab.take();
-
-    match pointer_data.location {
-        Location::Button(btn) => {
-            if lpm_grab == Some(btn) {
-                let req = match btn {
-                    ButtonKind::Close => FrameRequest::Close,
-                    ButtonKind::Maximize => {
+            Location::Button(ButtonKind::Minimize) if !pressed => FrameAction::Minimize,
+            Location::Head
+                if pressed && wm_capabilities.contains(WindowManagerCapabilities::MAXIMIZE) =>
+            {
+                match self.last_normal_click.replace(std::time::Instant::now()) {
+                    Some(now) if now.elapsed() < DOUBLE_CLICK_DURATION => {
                         if maximized {
-                            FrameRequest::UnMaximize
+                            FrameAction::UnMaximize
                         } else {
-                            FrameRequest::Maximize
+                            FrameAction::Maximize
                         }
                     }
-                    ButtonKind::Minimize => FrameRequest::Minimize,
-                };
-
-                Some(req)
-            } else {
-                None
+                    _ => FrameAction::Move,
+                }
             }
+            Location::Head if pressed => FrameAction::Move,
+            _ => return None,
+        };
+
+        Some(action)
+    }
+
+    /// Alternative click on decorations frame was made.
+    pub fn alternate_click(
+        &mut self,
+        pressed: bool,
+        wm_capabilities: &WindowManagerCapabilities,
+    ) -> Option<FrameAction> {
+        // Invalidate the normal click.
+        self.last_normal_click = None;
+
+        match self.location {
+            Location::Head | Location::Button(_)
+                if pressed && wm_capabilities.contains(WindowManagerCapabilities::WINDOW_MENU) =>
+            {
+                Some(FrameAction::ShowMenu(
+                    // XXX this could be one 1pt off when the frame is not maximized, but it's not
+                    // like it really matters in the end.
+                    self.position.0 as i32 - BORDER_SIZE as i32,
+                    // We must offset it by header size for precise position.
+                    self.position.1 as i32 - HEADER_SIZE as i32,
+                ))
+            }
+            _ => None,
         }
-        _ => None,
+    }
+
+    /// The mouse moved inside the decorations frame.
+    pub fn moved(&mut self, location: Location, x: f64, y: f64, resizable: bool) -> &'static str {
+        self.location = location;
+        self.position = (x, y);
+        match self.location {
+            _ if !resizable => "left_ptr",
+            Location::Top => "top_side",
+            Location::TopRight => "top_right_corner",
+            Location::Right => "right_side",
+            Location::BottomRight => "bottom_right_corner",
+            Location::Bottom => "bottom_side",
+            Location::BottomLeft => "bottom_left_corner",
+            Location::Left => "left_side",
+            Location::TopLeft => "top_left_corner",
+            _ => "left_ptr",
+        }
+    }
+
+    /// The mouse left the decorations frame.
+    pub fn left(&mut self) {
+        // Reset only the location.
+        self.location = Location::None;
     }
 }
 
-fn rmb_press(pointer_data: &PointerUserData) -> Option<FrameRequest> {
-    match pointer_data.location {
-        Location::Head | Location::Button(_) => Some(FrameRequest::ShowMenu(
-            pointer_data.seat.clone(),
-            pointer_data.position.0 as i32 - BORDER_SIZE as i32,
-            // We must offset it by header size for precise position.
-            pointer_data.position.1 as i32 - (HEADER_SIZE as i32 + BORDER_SIZE as i32),
-        )),
-        _ => None,
-    }
-}
-
-fn change_pointer(pointer: &ThemedPointer, inner: &Inner, location: Location, serial: Option<u32>) {
-    // Prevent theming of the surface if it was requested.
-    if !inner.theme_over_surface && location == Location::None {
-        return;
-    }
-
-    let name = match location {
-        // If we can't resize a frame we shouldn't show resize cursors.
-        _ if !inner.resizable => "left_ptr",
-        Location::Top => "top_side",
-        Location::TopRight => "top_right_corner",
-        Location::Right => "right_side",
-        Location::BottomRight => "bottom_right_corner",
-        Location::Bottom => "bottom_side",
-        Location::BottomLeft => "bottom_left_corner",
-        Location::Left => "left_side",
-        Location::TopLeft => "top_left_corner",
-        _ => "left_ptr",
-    };
-
-    if pointer.set_cursor(name, serial).is_err() {
-        error!("Failed to set cursor");
-    }
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+pub enum Location {
+    #[default]
+    None,
+    Head,
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+    TopLeft,
+    Button(ButtonKind),
 }
