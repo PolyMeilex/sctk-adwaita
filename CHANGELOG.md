@@ -1,5 +1,7 @@
 ## Unreleased
 
+- **Breaking:** `wayland-csd-frame` is now used as a part of the public interface.
+
 ## 0.6.1
 - Bump tiny-skia to v0.11 (#32) 
 - cleanup: Remove debug println (#29) 

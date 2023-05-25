@@ -1,20 +1,24 @@
 use std::error::Error;
+use std::mem;
 use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tiny_skia::{
     Color, FillRule, Mask, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point, Rect,
     Transform,
 };
 
+use smithay_client_toolkit::reexports::client::backend::ObjectId;
 use smithay_client_toolkit::reexports::client::protocol::wl_shm;
 use smithay_client_toolkit::reexports::client::protocol::wl_subsurface::WlSubsurface;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
 use smithay_client_toolkit::reexports::client::{Dispatch, Proxy, QueueHandle};
+use smithay_client_toolkit::reexports::csd_frame::{
+    CursorIcon, DecorationsFrame, FrameAction, FrameClick, WindowManagerCapabilities, WindowState,
+};
 
 use smithay_client_toolkit::compositor::SurfaceData;
-use smithay_client_toolkit::shell::xdg::frame::{DecorationsFrame, FrameAction, FrameClick};
-use smithay_client_toolkit::shell::xdg::window::{WindowManagerCapabilities, WindowState};
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shm::{slot::SlotPool, Shm};
 use smithay_client_toolkit::subcompositor::SubcompositorState;
@@ -63,6 +67,12 @@ pub struct AdwaitaFrame<State> {
     /// Whether the frame should be redrawn.
     dirty: bool,
 
+    /// Whether the drawing should be synced with the main surface.
+    should_sync: bool,
+
+    /// Scale factor used for the surface.
+    scale_factor: u32,
+
     /// Wether the frame is resizable.
     resizable: bool,
 
@@ -105,6 +115,8 @@ where
             subcompositor,
             queue_handle,
             dirty: true,
+            scale_factor: 1,
+            should_sync: true,
             title: None,
             title_text: TitleText::new(theme.active.font_color),
             theme,
@@ -147,16 +159,17 @@ where
         }
     }
 
-    fn redraw_inner(&mut self) -> SkiaResult {
+    fn redraw_inner(&mut self) -> Option<bool> {
         let decorations = self.decorations.as_mut()?;
 
         // Reset the dirty bit.
         self.dirty = false;
+        let should_sync = mem::take(&mut self.should_sync);
 
         // Don't draw borders if the frame explicitly hidden or fullscreened.
         if self.state.contains(WindowState::FULLSCREEN) {
             decorations.hide();
-            return Some(());
+            return Some(true);
         }
 
         let colors = if self.state.contains(WindowState::ACTIVATED) {
@@ -179,7 +192,7 @@ where
             .parts()
             .filter(|(idx, _)| *idx == DecorationParts::HEADER || draw_borders)
         {
-            let scale = part.scale();
+            let scale = self.scale_factor;
 
             // XXX to perfectly align the visible borders we draw them with
             // the header, otherwise rounded corners won't look 'smooth' at the
@@ -278,6 +291,12 @@ where
                 }
             };
 
+            if should_sync {
+                part.subsurface.set_sync();
+            } else {
+                part.subsurface.set_desync();
+            }
+
             part.surface.set_buffer_scale(scale as i32);
 
             part.subsurface.set_position(pos.0, pos.1);
@@ -292,7 +311,7 @@ where
             part.surface.commit();
         }
 
-        Some(())
+        Some(should_sync)
     }
 }
 
@@ -329,6 +348,7 @@ where
                 &self.queue_handle,
             ));
             self.dirty = true;
+            self.should_sync = true;
         }
     }
 
@@ -347,10 +367,11 @@ where
         self.buttons
             .arrange(width.get(), get_margin_h_lp(&self.state));
         self.dirty = true;
+        self.should_sync = true;
     }
 
-    fn draw(&mut self) {
-        self.redraw_inner();
+    fn draw(&mut self) -> bool {
+        self.redraw_inner().unwrap_or(true)
     }
 
     fn subtract_borders(
@@ -394,21 +415,41 @@ where
         self.dirty = true;
     }
 
-    fn on_click(&mut self, click: FrameClick, pressed: bool) -> Option<FrameAction> {
+    fn on_click(
+        &mut self,
+        timestamp: Duration,
+        click: FrameClick,
+        pressed: bool,
+    ) -> Option<FrameAction> {
         match click {
-            FrameClick::Normal => {
-                self.mouse
-                    .click(pressed, self.resizable, &self.state, &self.wm_capabilities)
-            }
+            FrameClick::Normal => self.mouse.click(
+                timestamp,
+                pressed,
+                self.resizable,
+                &self.state,
+                &self.wm_capabilities,
+            ),
             FrameClick::Alternate => self.mouse.alternate_click(pressed, &self.wm_capabilities),
+            _ => None,
         }
     }
 
-    fn click_point_moved(&mut self, surface: &WlSurface, x: f64, y: f64) -> Option<&str> {
-        let surface = WlTyped::wrap::<State>(surface.clone());
+    fn set_scaling_factor(&mut self, scale_factor: f64) {
+        // NOTE: Clamp it just in case to some ok-ish range.
+        self.scale_factor = scale_factor.clamp(0.1, 64.).ceil() as u32;
+        self.dirty = true;
+        self.should_sync = true;
+    }
 
+    fn click_point_moved(
+        &mut self,
+        _timestamp: Duration,
+        surface: &ObjectId,
+        x: f64,
+        y: f64,
+    ) -> Option<CursorIcon> {
         let decorations = self.decorations.as_ref()?;
-        let location = decorations.find_surface(&surface);
+        let location = decorations.find_surface(surface);
         if location == Location::None {
             return None;
         }

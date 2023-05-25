@@ -1,7 +1,6 @@
 use log::{debug, warn};
+use smithay_client_toolkit::reexports::csd_frame::{WindowManagerCapabilities, WindowState};
 use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
-
-use smithay_client_toolkit::shell::xdg::window::{WindowManagerCapabilities, WindowState};
 
 use crate::{theme::ColorMap, Location, SkiaResult};
 
@@ -113,6 +112,7 @@ impl Buttons {
         self.buttons_left.last().map(|button| button.end_x())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &self,
         start_x: f32,
@@ -375,7 +375,7 @@ pub enum ButtonKind {
     Minimize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Side {
     Left,
     Right,
