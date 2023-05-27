@@ -139,7 +139,6 @@ impl Button {
         resizable: bool,
         state: &WindowState,
     ) -> SkiaResult {
-        println!("Draw button: {:?}", self);
         let button_bg = if mouse_location == Location::Button(self.kind)
             && (resizable || self.kind != ButtonKind::Maximize)
         {
