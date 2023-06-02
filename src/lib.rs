@@ -32,6 +32,7 @@ use crate::theme::{
 };
 
 use buttons::Buttons;
+use config::get_button_layout_config;
 use parts::DecorationParts;
 use pointer::{Location, MouseState};
 use title::TitleText;
@@ -104,7 +105,7 @@ where
             title: None,
             title_text: TitleText::new(theme.active.font_color),
             theme,
-            buttons: Default::default(),
+            buttons: Buttons::new(get_button_layout_config()),
             mouse: Default::default(),
             state: WindowState::empty(),
             wm_capabilities: WindowManagerCapabilities::all(),
@@ -310,7 +311,7 @@ where
     fn update_wm_capabilities(&mut self, wm_capabilities: WindowManagerCapabilities) {
         self.dirty |= self.wm_capabilities != wm_capabilities;
         self.wm_capabilities = wm_capabilities;
-        self.buttons.update(wm_capabilities);
+        self.buttons.update_wm_capabilities(wm_capabilities);
     }
 
     fn set_hidden(&mut self, hidden: bool) {
@@ -340,7 +341,7 @@ where
             .expect("trying to resize the hidden frame.");
 
         decorations.resize(width.get(), height.get());
-        self.buttons.arrange(width.get());
+        self.buttons.arrange(width.get(), get_margin_h_lp(&self.state));
         self.dirty = true;
     }
 
@@ -489,23 +490,17 @@ fn draw_headerbar(
     let _ = draw_headerbar_bg(pixmap, scale, colors, state);
 
     // Horizontal margin.
-    let margin_h = if state.intersects(WindowState::MAXIMIZED | WindowState::TILED) {
-        0.
-    } else {
-        VISIBLE_BORDER_SIZE as f32 * scale
-    };
+    let margin_h = get_margin_h_lp(state) * 2.0;
+
+    let canvas_w = pixmap.width() as f32;
+    let canvas_h = pixmap.height() as f32;
+
+    let header_w = canvas_w - margin_h * 2.0;
+    let header_h = canvas_h;
 
     if let Some(text_pixmap) = text_pixmap {
         const TEXT_OFFSET: f32 = 10.;
-
-        let closest_button_x = buttons.left_most().x() * scale;
         let offset_x = TEXT_OFFSET * scale;
-
-        let canvas_w = pixmap.width() as f32;
-        let canvas_h = pixmap.height() as f32;
-
-        let header_w = canvas_w - margin_h * 2.0;
-        let header_h = canvas_h;
 
         let text_w = text_pixmap.width() as f32;
         let text_h = text_pixmap.height() as f32;
@@ -513,44 +508,57 @@ fn draw_headerbar(
         let x = margin_h + header_w / 2. - text_w / 2.;
         let y = header_h / 2. - text_h / 2.;
 
-        let (x, y) = if x + text_w < closest_button_x - offset_x {
-            (x, y)
-        } else {
-            let x = closest_button_x - text_w - offset_x;
-            let y = header_h / 2. - text_h / 2.;
-            (x, y)
-        };
+        let left_buttons_end_x = buttons.left_buttons_end_x().unwrap_or(0.0) * scale;
+        let right_buttons_start_x =
+            buttons.right_buttons_start_x().unwrap_or(header_w / scale) * scale;
 
-        // Ensure that text start within the bounds.
-        let x = x.max(margin_h + offset_x);
+        {
+            // We have enough space to center text
+            let (x, y, text_canvas_start_x) = if (x + text_w < right_buttons_start_x - offset_x)
+                && (x > left_buttons_end_x + offset_x)
+            {
+                dbg!(x, y, text_w, right_buttons_start_x);
+                let text_canvas_start_x = x;
 
-        if let Some(clip) = Rect::from_xywh(0., 0., closest_button_x - offset_x, canvas_h) {
-            let mut mask = ClipMask::new();
-            mask.set_path(
-                canvas_w as u32,
-                canvas_h as u32,
-                &PathBuilder::from_rect(clip),
-                FillRule::Winding,
-                false,
-            );
-            pixmap.draw_pixmap(
-                x as i32,
-                y as i32,
-                text_pixmap.as_ref(),
-                &PixmapPaint::default(),
-                Transform::identity(),
-                Some(&mask),
-            );
+                (x, y, text_canvas_start_x)
+            } else {
+                let x = left_buttons_end_x + offset_x;
+                let text_canvas_start_x = left_buttons_end_x + offset_x;
+
+                (x, y, text_canvas_start_x)
+            };
+
+            let text_canvas_end_x = right_buttons_start_x - x - offset_x;
+            // Ensure that text start within the bounds.
+            let x = x.max(margin_h + offset_x);
+
+            if let Some(clip) =
+                Rect::from_xywh(text_canvas_start_x, 0., text_canvas_end_x, canvas_h)
+            {
+                let mut mask = ClipMask::new();
+                mask.set_path(
+                    canvas_w as u32,
+                    canvas_h as u32,
+                    &PathBuilder::from_rect(clip),
+                    FillRule::Winding,
+                    false,
+                );
+                pixmap.draw_pixmap(
+                    x as i32,
+                    y as i32,
+                    text_pixmap.as_ref(),
+                    &PixmapPaint::default(),
+                    Transform::identity(),
+                    Some(&mask),
+                );
+            }
         }
     }
 
     // Draw the buttons.
-    for button in buttons.iter().flatten() {
-        // Ensure that it'll be visible.
-        if button.x() > margin_h {
-            button.draw(scale, colors, mouse, pixmap, resizable, state);
-        }
-    }
+    buttons.draw(
+        margin_h, header_w, scale, colors, mouse, pixmap, resizable, state,
+    );
 }
 
 #[must_use]
@@ -655,4 +663,13 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
     pb.close();
 
     pb.finish()
+}
+
+// returns horizontal margin, logical points
+fn get_margin_h_lp(state: &WindowState) -> f32 {
+    if state.intersects(WindowState::MAXIMIZED | WindowState::TILED) {
+        0.
+    } else {
+        VISIBLE_BORDER_SIZE as f32
+    }
 }
