@@ -341,7 +341,8 @@ where
             .expect("trying to resize the hidden frame.");
 
         decorations.resize(width.get(), height.get());
-        self.buttons.arrange(width.get(), get_margin_h_lp(&self.state));
+        self.buttons
+            .arrange(width.get(), get_margin_h_lp(&self.state));
         self.dirty = true;
     }
 
@@ -517,7 +518,6 @@ fn draw_headerbar(
             let (x, y, text_canvas_start_x) = if (x + text_w < right_buttons_start_x - offset_x)
                 && (x > left_buttons_end_x + offset_x)
             {
-                dbg!(x, y, text_w, right_buttons_start_x);
                 let text_canvas_start_x = x;
 
                 (x, y, text_canvas_start_x)

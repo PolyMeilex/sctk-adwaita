@@ -106,17 +106,11 @@ impl Buttons {
     }
 
     pub fn right_buttons_start_x(&self) -> Option<f32> {
-        match self.buttons_right.last() {
-            Some(button) => Some(button.x()),
-            None => None,
-        }
+        self.buttons_right.last().map(|button| button.x())
     }
 
     pub fn left_buttons_end_x(&self) -> Option<f32> {
-        match self.buttons_left.last() {
-            Some(button) => Some(button.end_x()),
-            None => None,
-        }
+        self.buttons_left.last().map(|button| button.end_x())
     }
 
     pub fn draw(
@@ -147,16 +141,14 @@ impl Buttons {
     }
 
     fn parse_button_layout(sides: Option<(String, String)>) -> Option<ButtonLayout> {
-        if sides.is_none() {
+        let Some((left_side, right_side)) = sides else {
             return None;
-        }
-
-        let (left_side, right_side) = sides.unwrap();
+        };
 
         let buttons_left = Buttons::parse_button_layout_side(left_side, Side::Left);
         let buttons_right = Buttons::parse_button_layout_side(right_side, Side::Right);
 
-        if buttons_left.len() == 0 && buttons_right.len() == 0 {
+        if buttons_left.is_empty() && buttons_right.is_empty() {
             warn!("No valid buttons found in configuration");
             return None;
         }
@@ -167,7 +159,7 @@ impl Buttons {
     fn parse_button_layout_side(config: String, side: Side) -> Vec<Button> {
         let mut buttons: Vec<Button> = vec![];
 
-        for button in config.split(",").take(3) {
+        for button in config.split(',').take(3) {
             let button_kind = match button {
                 "close" => Some(ButtonKind::Close),
                 "maximize" => Some(ButtonKind::Maximize),
@@ -175,22 +167,19 @@ impl Buttons {
                 _ => None,
             };
 
-            if button_kind.is_none() {
+            let Some(kind) = button_kind else {
                 warn!("Found unknown button type, ignoring");
                 continue;
-            }
-            let kind = button_kind.unwrap();
+            };
             buttons.push(Button::new(kind));
         }
 
         // For the right side, we need to revert the order
-        let buttons = if side == Side::Right {
+        if side == Side::Right {
             buttons.into_iter().rev().collect()
         } else {
             buttons
-        };
-
-        buttons
+        }
     }
 
     fn get_default_buttons_layout() -> ButtonLayout {

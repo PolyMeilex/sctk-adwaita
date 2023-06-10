@@ -43,10 +43,10 @@ pub(crate) fn get_button_layout_config() -> Option<(String, String)> {
 
     let sides_split: Vec<_> = config_string
         // Taking last word
-        .rsplit(" ")
-        .nth(0)?
+        .rsplit(' ')
+        .next()?
         // Split by left/right side
-        .split(":")
+        .split(':')
         // Only two sides
         .take(2)
         .collect();
