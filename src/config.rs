@@ -37,9 +37,7 @@ pub(crate) fn get_button_layout_config() -> Option<(String, String)> {
         .arg("string:button-layout")
         .output()
         .ok()
-        .and_then(|out| String::from_utf8(out.stdout).ok());
-
-    let config_string = config_string.unwrap();
+        .and_then(|out| String::from_utf8(out.stdout).ok())?;
 
     let sides_split: Vec<_> = config_string
         // Taking last word
