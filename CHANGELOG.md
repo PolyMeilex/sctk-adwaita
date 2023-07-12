@@ -1,3 +1,6 @@
+## Unreleased
+- The double click threshold value was raised to `400ms`
+
 ## 0.6.0
 - Update the `smithay-client-toolkit` to `0.17.0`
 - Don't use tiny-skia's default features
