@@ -14,7 +14,9 @@ use crate::{
 };
 
 /// Time to register the next click as a double click.
-const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(300);
+///
+/// The value is the same as the default in gtk4.
+const DOUBLE_CLICK_DURATION: Duration = Duration::from_millis(400);
 
 /// The state of the mouse input inside the decorations frame.
 #[derive(Debug, Default)]
