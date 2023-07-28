@@ -321,7 +321,9 @@ impl Button {
 
                     let x = x - hsize;
                     let y = y - hsize;
-                    pb.push_rect(x, y, size, size);
+                    if let Some(rect) = Rect::from_xywh(x, y, size, size) {
+                        pb.push_rect(rect);
+                    }
 
                     if state.contains(WindowState::MAXIMIZED) {
                         if let Some(rect) =
