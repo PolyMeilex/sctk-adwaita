@@ -3,7 +3,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use tiny_skia::{
-    ClipMask, Color, FillRule, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point, Rect,
+    Color, FillRule, Mask, Path, PathBuilder, Pixmap, PixmapMut, PixmapPaint, Point, Rect,
     Transform,
 };
 
@@ -535,13 +535,13 @@ fn draw_headerbar(
             if let Some(clip) =
                 Rect::from_xywh(text_canvas_start_x, 0., text_canvas_end_x, canvas_h)
             {
-                let mut mask = ClipMask::new();
-                mask.set_path(
-                    canvas_w as u32,
-                    canvas_h as u32,
+                let mut mask = Mask::new(canvas_w as u32, canvas_h as u32)
+                    .expect("Invalid mask width and height");
+                mask.fill_path(
                     &PathBuilder::from_rect(clip),
                     FillRule::Winding,
                     false,
+                    Transform::identity(),
                 );
                 pixmap.draw_pixmap(
                     x as i32,

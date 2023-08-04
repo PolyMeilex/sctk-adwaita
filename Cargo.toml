@@ -11,7 +11,7 @@ description = "Adwaita-like SCTK Frame"
 
 [dependencies]
 smithay-client-toolkit = { version = "0.17.0", default_features = false }
-tiny-skia = { version = "0.8", default-features = false, features = ["std", "simd"] }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 log = "0.4"
 memmap2 = { version = "0.5.8", optional = true }
 
