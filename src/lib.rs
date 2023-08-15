@@ -26,6 +26,7 @@ mod parts;
 mod pointer;
 pub mod theme;
 mod title;
+mod wl_typed;
 
 use crate::theme::{
     ColorMap, ColorTheme, BORDER_SIZE, CORNER_RADIUS, HEADER_SIZE, VISIBLE_BORDER_SIZE,
@@ -36,6 +37,7 @@ use config::get_button_layout_config;
 use parts::DecorationParts;
 use pointer::{Location, MouseState};
 use title::TitleText;
+use wl_typed::WlTyped;
 
 /// XXX this is not result, so `must_use` when needed.
 type SkiaResult = Option<()>;
@@ -44,7 +46,7 @@ type SkiaResult = Option<()>;
 #[derive(Debug)]
 pub struct AdwaitaFrame<State> {
     /// The base surface used to create the window.
-    base_surface: WlSurface,
+    base_surface: WlTyped<WlSurface, SurfaceData>,
 
     /// Subcompositor to create/drop subsurfaces ondemand.
     subcompositor: Arc<SubcompositorState>,
@@ -84,7 +86,8 @@ where
         queue_handle: QueueHandle<State>,
         frame_config: FrameConfig,
     ) -> Result<Self, Box<dyn Error>> {
-        let base_surface = base_surface.wl_surface().clone();
+        let base_surface = WlTyped::wrap::<State>(base_surface.wl_surface().clone());
+
         let pool = SlotPool::new(1, shm)?;
 
         let decorations = Some(DecorationParts::new(
@@ -402,8 +405,10 @@ where
     }
 
     fn click_point_moved(&mut self, surface: &WlSurface, x: f64, y: f64) -> Option<&str> {
+        let surface = WlTyped::wrap::<State>(surface.clone());
+
         let decorations = self.decorations.as_ref()?;
-        let location = decorations.find_surface(surface);
+        let location = decorations.find_surface(&surface);
         if location == Location::None {
             return None;
         }
