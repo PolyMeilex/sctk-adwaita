@@ -1,4 +1,9 @@
 ## Unreleased
+
+## 0.6.1
+- Bump tiny-skia to v0.11 (#32) 
+- cleanup: Remove debug println (#29) 
+- Support custom header buttons layouts (#30)
 - The double click threshold value was raised to `400ms`
 
 ## 0.6.0
