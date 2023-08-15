@@ -338,10 +338,10 @@ where
     }
 
     fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) {
-        let decorations = self
-            .decorations
-            .as_mut()
-            .expect("trying to resize the hidden frame.");
+        let Some(decorations) = self.decorations.as_mut() else {
+            log::error!("trying to resize the hidden frame.");
+            return;
+        };
 
         decorations.resize(width.get(), height.get());
         self.buttons
