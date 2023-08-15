@@ -31,9 +31,9 @@ jobs:
           components: clippy
 
       - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/clippy-check@v1
         with:
-          command: clippy
+          token: ${{ secrets.GITHUB_TOKEN }}
           args: -- -D clippy::print_stderr -D clippy::print_stdout -D clippy::dbg_macro
 
   default-build:
