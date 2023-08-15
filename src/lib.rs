@@ -540,22 +540,28 @@ fn draw_headerbar(
             if let Some(clip) =
                 Rect::from_xywh(text_canvas_start_x, 0., text_canvas_end_x, canvas_h)
             {
-                let mut mask = Mask::new(canvas_w as u32, canvas_h as u32)
-                    .expect("Invalid mask width and height");
-                mask.fill_path(
-                    &PathBuilder::from_rect(clip),
-                    FillRule::Winding,
-                    false,
-                    Transform::identity(),
-                );
-                pixmap.draw_pixmap(
-                    x as i32,
-                    y as i32,
-                    text_pixmap.as_ref(),
-                    &PixmapPaint::default(),
-                    Transform::identity(),
-                    Some(&mask),
-                );
+                if let Some(mut mask) = Mask::new(canvas_w as u32, canvas_h as u32) {
+                    mask.fill_path(
+                        &PathBuilder::from_rect(clip),
+                        FillRule::Winding,
+                        false,
+                        Transform::identity(),
+                    );
+                    pixmap.draw_pixmap(
+                        x as i32,
+                        y as i32,
+                        text_pixmap.as_ref(),
+                        &PixmapPaint::default(),
+                        Transform::identity(),
+                        Some(&mask),
+                    );
+                } else {
+                    log::error!(
+                        "Invalid mask width and height: w: {}, h: {}",
+                        canvas_w as u32,
+                        canvas_h as u32
+                    );
+                }
             }
         }
     }
