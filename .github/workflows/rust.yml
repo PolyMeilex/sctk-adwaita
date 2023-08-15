@@ -34,7 +34,7 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: -- -D clippy::print_stderr -D clippy::print_stdout -D clippy::dbg_macro
+          args: -- -D clippy::print_stderr -D clippy::print_stdout -D clippy::dbg_macro -D clippy::exit -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic
 
   default-build:
     runs-on: ubuntu-latest
