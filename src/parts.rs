@@ -1,6 +1,6 @@
 use smithay_client_toolkit::reexports::client::{
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
-    Dispatch, Proxy, QueueHandle,
+    Dispatch, QueueHandle,
 };
 
 use smithay_client_toolkit::{
@@ -8,8 +8,8 @@ use smithay_client_toolkit::{
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
-use crate::pointer::Location;
 use crate::theme::{BORDER_SIZE, HEADER_SIZE};
+use crate::{pointer::Location, wl_typed::WlTyped};
 
 /// The decoration's 'parts'.
 #[derive(Debug)]
@@ -26,7 +26,7 @@ impl DecorationParts {
     pub const BOTTOM: usize = 4;
 
     pub fn new<State>(
-        base_surface: &WlSurface,
+        base_surface: &WlTyped<WlSurface, SurfaceData>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
     ) -> Self
@@ -124,7 +124,7 @@ impl DecorationParts {
         &self.parts[Self::HEADER]
     }
 
-    pub fn find_surface(&self, surface: &WlSurface) -> Location {
+    pub fn find_surface(&self, surface: &WlTyped<WlSurface, SurfaceData>) -> Location {
         let pos = match self.parts.iter().position(|part| &part.surface == surface) {
             Some(pos) => pos,
             None => return Location::None,
@@ -143,8 +143,8 @@ impl DecorationParts {
 
 #[derive(Debug)]
 pub struct Part {
-    pub surface: WlSurface,
-    pub subsurface: WlSubsurface,
+    pub surface: WlTyped<WlSurface, SurfaceData>,
+    pub subsurface: WlTyped<WlSubsurface, SubsurfaceData>,
 
     pub width: u32,
     pub height: u32,
@@ -154,7 +154,7 @@ pub struct Part {
 
 impl Part {
     fn new<State>(
-        parent: &WlSurface,
+        parent: &WlTyped<WlSurface, SurfaceData>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
         width: u32,
@@ -164,7 +164,11 @@ impl Part {
     where
         State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
     {
-        let (subsurface, surface) = subcompositor.create_subsurface(parent.clone(), queue_handle);
+        let (subsurface, surface) =
+            subcompositor.create_subsurface(parent.inner().clone(), queue_handle);
+
+        let subsurface = WlTyped::wrap::<State>(subsurface);
+        let surface = WlTyped::wrap::<State>(surface);
 
         // Sync with the parent surface.
         subsurface.set_sync();
@@ -179,7 +183,7 @@ impl Part {
     }
 
     pub fn scale(&self) -> u32 {
-        self.surface.data::<SurfaceData>().unwrap().scale_factor() as u32
+        self.surface.data().scale_factor() as u32
     }
 }
 
