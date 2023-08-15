@@ -19,6 +19,23 @@ jobs:
           command: fmt
           args: --all -- --check
 
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D clippy::print_stderr -D clippy::print_stdout -D clippy::dbg_macro
+
   default-build:
     runs-on: ubuntu-latest
     steps:
