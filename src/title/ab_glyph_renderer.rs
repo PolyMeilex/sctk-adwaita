@@ -31,7 +31,10 @@ impl AbGlyphTitleText {
 
         let size = parse_font(&font)
             .pt_to_px_scale(font_pref_pt_size)
-            .expect("invalid font units_per_em");
+            .unwrap_or_else(|| {
+                log::error!("invalid font units_per_em");
+                PxScale { x: 17.6, y: 17.6 }
+            });
 
         Self {
             title: <_>::default(),
@@ -148,8 +151,14 @@ fn parse_font(sys_font: &Option<(memmap2::Mmap, FontPreference)>) -> FontRef<'_>
                     }
                     f
                 })
-                .unwrap_or_else(|_| FontRef::try_from_slice(CANTARELL).unwrap())
+                .unwrap_or_else(|_| {
+                    // We control the default font, so I guess it's fine to unwrap it
+                    #[allow(clippy::unwrap_used)]
+                    FontRef::try_from_slice(CANTARELL).unwrap()
+                })
         }
+        // We control the default font, so I guess it's fine to unwrap it
+        #[allow(clippy::unwrap_used)]
         _ => FontRef::try_from_slice(CANTARELL).unwrap(),
     }
 }
