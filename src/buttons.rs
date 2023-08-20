@@ -1,4 +1,4 @@
-use log::warn;
+use log::{debug, warn};
 use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
 use smithay_client_toolkit::shell::xdg::window::{WindowManagerCapabilities, WindowState};
@@ -161,17 +161,20 @@ impl Buttons {
 
         for button in config.split(',').take(3) {
             let button_kind = match button {
-                "close" => Some(ButtonKind::Close),
-                "maximize" => Some(ButtonKind::Maximize),
-                "minimize" => Some(ButtonKind::Minimize),
-                _ => None,
+                "close" => ButtonKind::Close,
+                "maximize" => ButtonKind::Maximize,
+                "minimize" => ButtonKind::Minimize,
+                "appmenu" => {
+                    debug!("Ignoring \"appmenu\" button");
+                    continue;
+                }
+                _ => {
+                    warn!("Ignoring unknown button type: {button}");
+                    continue;
+                }
             };
 
-            let Some(kind) = button_kind else {
-                warn!("Found unknown button type, ignoring");
-                continue;
-            };
-            buttons.push(Button::new(kind));
+            buttons.push(Button::new(button_kind));
         }
 
         // For the right side, we need to revert the order
