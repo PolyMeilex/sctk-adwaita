@@ -1,5 +1,4 @@
-## Unreleased
-
+## 0.7.0
 - **Breaking:** `wayland-csd-frame` is now used as a part of the public interface.
 
 ## 0.6.1
