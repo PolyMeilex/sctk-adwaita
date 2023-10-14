@@ -1,11 +1,7 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use smithay_client_toolkit::{
-    reexports::protocols::xdg::shell::client::xdg_toplevel::ResizeEdge,
-    shell::xdg::{
-        frame::FrameAction,
-        window::{WindowManagerCapabilities, WindowState},
-    },
+use smithay_client_toolkit::reexports::csd_frame::{
+    CursorIcon, FrameAction, ResizeEdge, WindowManagerCapabilities, WindowState,
 };
 
 use crate::{
@@ -27,13 +23,14 @@ pub(crate) struct MouseState {
     position: (f64, f64),
 
     /// The instant of the last click.
-    last_normal_click: Option<Instant>,
+    last_normal_click: Option<Duration>,
 }
 
 impl MouseState {
     /// The normal click on decorations frame was made.
     pub fn click(
         &mut self,
+        timestamp: Duration,
         pressed: bool,
         resizable: bool,
         state: &WindowState,
@@ -60,8 +57,8 @@ impl MouseState {
             Location::Head
                 if pressed && wm_capabilities.contains(WindowManagerCapabilities::MAXIMIZE) =>
             {
-                match self.last_normal_click.replace(std::time::Instant::now()) {
-                    Some(now) if now.elapsed() < DOUBLE_CLICK_DURATION => {
+                match self.last_normal_click.replace(timestamp) {
+                    Some(last) if timestamp.saturating_sub(last) < DOUBLE_CLICK_DURATION => {
                         if maximized {
                             FrameAction::UnMaximize
                         } else {
@@ -104,20 +101,20 @@ impl MouseState {
     }
 
     /// The mouse moved inside the decorations frame.
-    pub fn moved(&mut self, location: Location, x: f64, y: f64, resizable: bool) -> &'static str {
+    pub fn moved(&mut self, location: Location, x: f64, y: f64, resizable: bool) -> CursorIcon {
         self.location = location;
         self.position = (x, y);
         match self.location {
-            _ if !resizable => "left_ptr",
-            Location::Top => "top_side",
-            Location::TopRight => "top_right_corner",
-            Location::Right => "right_side",
-            Location::BottomRight => "bottom_right_corner",
-            Location::Bottom => "bottom_side",
-            Location::BottomLeft => "bottom_left_corner",
-            Location::Left => "left_side",
-            Location::TopLeft => "top_left_corner",
-            _ => "left_ptr",
+            _ if !resizable => CursorIcon::Default,
+            Location::Top => CursorIcon::NResize,
+            Location::TopRight => CursorIcon::NeResize,
+            Location::Right => CursorIcon::EResize,
+            Location::BottomRight => CursorIcon::SeResize,
+            Location::Bottom => CursorIcon::SResize,
+            Location::BottomLeft => CursorIcon::SwResize,
+            Location::Left => CursorIcon::WResize,
+            Location::TopLeft => CursorIcon::NwResize,
+            _ => CursorIcon::Default,
         }
     }
 

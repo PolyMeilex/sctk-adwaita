@@ -1,6 +1,7 @@
 // Based on https://github.com/Smithay/client-toolkit/blob/master/examples/themed_window.rs.
 
 use std::sync::Arc;
+use std::time::Duration;
 use std::{convert::TryInto, num::NonZeroU32};
 
 use smithay_client_toolkit::reexports::client::{
@@ -8,6 +9,10 @@ use smithay_client_toolkit::reexports::client::{
     protocol::{wl_output, wl_pointer, wl_seat, wl_shm, wl_surface},
     Connection, Proxy, QueueHandle,
 };
+use smithay_client_toolkit::reexports::csd_frame::{
+    CursorIcon, DecorationsFrame, FrameAction, FrameClick, ResizeEdge,
+};
+use smithay_client_toolkit::reexports::protocols::xdg::shell::client::xdg_toplevel::ResizeEdge as XdgResizeEdge;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
@@ -23,7 +28,6 @@ use smithay_client_toolkit::{
     },
     shell::{
         xdg::{
-            frame::{DecorationsFrame, FrameAction, FrameClick},
             window::{DecorationMode, Window, WindowConfigure, WindowDecorations, WindowHandler},
             XdgShell, XdgSurface,
         },
@@ -60,7 +64,6 @@ fn main() {
         .expect("Failed to create pool");
 
     let window_surface = compositor_state.create_surface(&qh);
-    let pointer_surface = compositor_state.create_surface(&qh);
 
     let window =
         xdg_shell_state.create_window(window_surface, WindowDecorations::ServerDefault, &qh);
@@ -81,7 +84,7 @@ fn main() {
         registry_state,
         seat_state,
         output_state,
-        _compositor_state: compositor_state,
+        compositor_state,
         subcompositor_state: Arc::new(subcompositor_state),
         shm_state,
         _xdg_shell_state: xdg_shell_state,
@@ -95,10 +98,9 @@ fn main() {
         buffer: None,
         window,
         window_frame: None,
-        pointer_surface,
         themed_pointer: None,
         set_cursor: false,
-        cursor_icon: String::from("diamond_cross"),
+        cursor_icon: CursorIcon::Crosshair,
     };
 
     // We don't draw immediately, the configure will notify us when to first draw.
@@ -118,7 +120,7 @@ struct SimpleWindow {
     registry_state: RegistryState,
     seat_state: SeatState,
     output_state: OutputState,
-    _compositor_state: CompositorState,
+    compositor_state: CompositorState,
     subcompositor_state: Arc<SubcompositorState>,
     shm_state: Shm,
     _xdg_shell_state: XdgShell,
@@ -132,10 +134,9 @@ struct SimpleWindow {
     buffer: Option<Buffer>,
     window: Window,
     window_frame: Option<AdwaitaFrame<Self>>,
-    pointer_surface: wl_surface::WlSurface,
     themed_pointer: Option<ThemedPointer>,
     set_cursor: bool,
-    cursor_icon: String,
+    cursor_icon: CursorIcon,
 }
 
 impl CompositorHandler for SimpleWindow {
@@ -145,6 +146,16 @@ impl CompositorHandler for SimpleWindow {
         _qh: &QueueHandle<Self>,
         _surface: &wl_surface::WlSurface,
         _new_factor: i32,
+    ) {
+        // Not needed for this example.
+    }
+
+    fn transform_changed(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_surface::WlSurface,
+        _: wl_output::Transform,
     ) {
         // Not needed for this example.
     }
@@ -305,9 +316,16 @@ impl SeatHandler for SimpleWindow {
         if capability == Capability::Pointer && self.themed_pointer.is_none() {
             println!("Set pointer capability");
             println!("Creating pointer theme");
+            let surface = self.compositor_state.create_surface(qh);
             let themed_pointer = self
                 .seat_state
-                .get_pointer_with_theme(qh, &seat, ThemeSpec::default())
+                .get_pointer_with_theme(
+                    qh,
+                    &seat,
+                    self.shm_state.wl_shm(),
+                    surface,
+                    ThemeSpec::default(),
+                )
                 .expect("Failed to create pointer");
             self.themed_pointer.replace(themed_pointer);
         }
@@ -346,8 +364,10 @@ impl PointerHandler for SimpleWindow {
                     self.cursor_icon = self
                         .window_frame
                         .as_mut()
-                        .and_then(|frame| frame.click_point_moved(&event.surface, x, y))
-                        .unwrap_or("diamond_cross")
+                        .and_then(|frame| {
+                            frame.click_point_moved(Duration::ZERO, &event.surface.id(), x, y)
+                        })
+                        .unwrap_or(CursorIcon::Crosshair)
                         .to_owned();
 
                     if &event.surface == self.window.wl_surface() {
@@ -362,17 +382,29 @@ impl PointerHandler for SimpleWindow {
                     }
                     println!("Pointer left");
                 }
-                Motion { .. } => {
-                    if let Some(new_cursor) = self
-                        .window_frame
-                        .as_mut()
-                        .and_then(|frame| frame.click_point_moved(&event.surface, x, y))
-                    {
+                Motion { time } => {
+                    if let Some(new_cursor) = self.window_frame.as_mut().and_then(|frame| {
+                        frame.click_point_moved(
+                            Duration::from_millis(time as u64),
+                            &event.surface.id(),
+                            x,
+                            y,
+                        )
+                    }) {
                         self.set_cursor = true;
                         self.cursor_icon = new_cursor.to_owned();
                     }
                 }
-                Press { button, serial, .. } | Release { button, serial, .. } => {
+                Press {
+                    button,
+                    serial,
+                    time,
+                }
+                | Release {
+                    button,
+                    serial,
+                    time,
+                } => {
                     let pressed = if matches!(event.kind, Press { .. }) {
                         true
                     } else {
@@ -385,11 +417,9 @@ impl PointerHandler for SimpleWindow {
                             _ => continue,
                         };
 
-                        if let Some(action) = self
-                            .window_frame
-                            .as_mut()
-                            .and_then(|frame| frame.on_click(click, pressed))
-                        {
+                        if let Some(action) = self.window_frame.as_mut().and_then(|frame| {
+                            frame.on_click(Duration::from_millis(time as u64), click, pressed)
+                        }) {
                             self.frame_action(pointer, serial, action);
                         }
                     } else if pressed {
@@ -420,8 +450,23 @@ impl SimpleWindow {
             FrameAction::Maximize => self.window.set_maximized(),
             FrameAction::UnMaximize => self.window.unset_maximized(),
             FrameAction::ShowMenu(x, y) => self.window.show_window_menu(seat, serial, (x, y)),
-            FrameAction::Resize(edge) => self.window.resize(seat, serial, edge),
+            FrameAction::Resize(edge) => {
+                let edge = match edge {
+                    ResizeEdge::None => XdgResizeEdge::None,
+                    ResizeEdge::Top => XdgResizeEdge::Top,
+                    ResizeEdge::Bottom => XdgResizeEdge::Bottom,
+                    ResizeEdge::Left => XdgResizeEdge::Left,
+                    ResizeEdge::TopLeft => XdgResizeEdge::TopLeft,
+                    ResizeEdge::BottomLeft => XdgResizeEdge::BottomLeft,
+                    ResizeEdge::Right => XdgResizeEdge::Right,
+                    ResizeEdge::TopRight => XdgResizeEdge::TopRight,
+                    ResizeEdge::BottomRight => XdgResizeEdge::BottomRight,
+                    _ => return,
+                };
+                self.window.resize(seat, serial, edge);
+            }
             FrameAction::Move => self.window.move_(seat, serial),
+            _ => (),
         }
     }
 }
@@ -435,13 +480,11 @@ impl ShmHandler for SimpleWindow {
 impl SimpleWindow {
     pub fn draw(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
         if self.set_cursor {
-            let _ = self.themed_pointer.as_mut().unwrap().set_cursor(
-                conn,
-                &self.cursor_icon,
-                self.shm_state.wl_shm(),
-                &self.pointer_surface,
-                1,
-            );
+            let _ = self
+                .themed_pointer
+                .as_mut()
+                .unwrap()
+                .set_cursor(conn, self.cursor_icon);
             self.set_cursor = false;
         }
 

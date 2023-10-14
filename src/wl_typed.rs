@@ -22,6 +22,7 @@ where
         &self.0
     }
 
+    #[allow(dead_code)]
     pub fn data(&self) -> &DATA {
         // Generic on Self::wrap makes sure that this will never panic
         #[allow(clippy::unwrap_used)]

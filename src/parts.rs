@@ -1,6 +1,7 @@
 use smithay_client_toolkit::reexports::client::{
+    backend::ObjectId,
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
-    Dispatch, QueueHandle,
+    Dispatch, Proxy, QueueHandle,
 };
 
 use smithay_client_toolkit::{
@@ -94,6 +95,7 @@ impl DecorationParts {
 
     pub fn hide(&self) {
         for part in self.parts.iter() {
+            part.subsurface.set_sync();
             part.surface.attach(None, 0, 0);
             part.surface.commit();
         }
@@ -124,8 +126,12 @@ impl DecorationParts {
         &self.parts[Self::HEADER]
     }
 
-    pub fn find_surface(&self, surface: &WlTyped<WlSurface, SurfaceData>) -> Location {
-        let pos = match self.parts.iter().position(|part| &part.surface == surface) {
+    pub fn find_surface(&self, surface: &ObjectId) -> Location {
+        let pos = match self
+            .parts
+            .iter()
+            .position(|part| &part.surface.id() == surface)
+        {
             Some(pos) => pos,
             None => return Location::None,
         };
@@ -180,10 +186,6 @@ impl Part {
             height,
             pos,
         }
-    }
-
-    pub fn scale(&self) -> u32 {
-        self.surface.data().scale_factor() as u32
     }
 }
 
