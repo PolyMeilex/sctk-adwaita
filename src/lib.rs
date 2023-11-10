@@ -589,7 +589,7 @@ fn draw_headerbar(
                         Transform::identity(),
                     );
                     pixmap.draw_pixmap(
-                        x as i32,
+                        x.round() as i32,
                         y as i32,
                         text_pixmap.as_ref(),
                         &PixmapPaint::default(),
