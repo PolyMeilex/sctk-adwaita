@@ -93,6 +93,10 @@ impl AbGlyphTitleText {
                 let left = bounds.min.x as u32;
                 let top = bounds.min.y as u32;
                 outline.draw(|x, y, c| {
+                    // `ab_glyph` may return values greater than 1.0, but they are defined to be
+                    // same as 1.0. For our purposes, we need to contrain this value.
+                    let c = c.min(1.0);
+
                     let p_idx = (top + y) * width + (left + x);
                     let old_alpha_u8 = pixels[p_idx as usize].alpha();
                     let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
