@@ -28,6 +28,7 @@ mod buttons;
 mod config;
 mod parts;
 mod pointer;
+mod shadow;
 pub mod theme;
 mod title;
 mod wl_typed;
@@ -41,6 +42,7 @@ use buttons::Buttons;
 use config::get_button_layout_config;
 use parts::DecorationParts;
 use pointer::{Location, MouseState};
+use shadow::Shadow;
 use title::TitleText;
 use wl_typed::WlTyped;
 
@@ -86,6 +88,7 @@ pub struct AdwaitaFrame<State> {
     theme: ColorTheme,
     title: Option<String>,
     title_text: Option<TitleText>,
+    shadow: Shadow,
 }
 
 impl<State> AdwaitaFrame<State>
@@ -130,6 +133,7 @@ where
             state: WindowState::empty(),
             wm_capabilities: WindowManagerCapabilities::all(),
             resizable: true,
+            shadow: Shadow::default(),
         })
     }
 
@@ -260,6 +264,15 @@ where
             // Fill everything with transparent background, since we draw rounded corners and
             // do invisible borders to enlarge the input zone.
             pixmap.fill(Color::TRANSPARENT);
+
+            if !self.state.intersects(WindowState::TILED) {
+                self.shadow.draw(
+                    &mut pixmap,
+                    scale,
+                    self.state.contains(WindowState::ACTIVATED),
+                    idx,
+                );
+            }
 
             match idx {
                 DecorationParts::HEADER => {

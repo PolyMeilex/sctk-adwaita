@@ -20,11 +20,13 @@ pub struct DecorationParts {
 
 impl DecorationParts {
     // XXX keep in sync with `Self;:new`.
-    pub const HEADER: usize = 0;
-    pub const TOP: usize = 1;
-    pub const LEFT: usize = 2;
-    pub const RIGHT: usize = 3;
-    pub const BOTTOM: usize = 4;
+    // Order is important. The lower the number, the earlier the part gets drawn.
+    // Because the header can overlap other parts, we draw it last.
+    pub const TOP: usize = 0;
+    pub const LEFT: usize = 1;
+    pub const RIGHT: usize = 2;
+    pub const BOTTOM: usize = 3;
+    pub const HEADER: usize = 4;
 
     pub fn new<State>(
         base_surface: &WlTyped<WlSurface, SurfaceData>,
@@ -36,19 +38,6 @@ impl DecorationParts {
     {
         // XXX the order must be in sync with associated constants.
         let parts = [
-            // Header.
-            Part::new(
-                base_surface,
-                subcompositor,
-                queue_handle,
-                Rect {
-                    x: 0,
-                    y: -(HEADER_SIZE as i32),
-                    width: 0, // Defined by `Self::resize`.
-                    height: HEADER_SIZE,
-                },
-                None,
-            ),
             // Top.
             Part::new(
                 base_surface,
@@ -120,6 +109,19 @@ impl DecorationParts {
                     width: 0, // Defined by `Self::resize`,
                     height: RESIZE_HANDLE_SIZE,
                 }),
+            ),
+            // Header.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                Rect {
+                    x: 0,
+                    y: -(HEADER_SIZE as i32),
+                    width: 0, // Defined by `Self::resize`.
+                    height: HEADER_SIZE,
+                },
+                None,
             ),
         ];
 
