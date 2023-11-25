@@ -29,13 +29,18 @@ impl RenderedShadow {
         let shadow_size = SHADOW_SIZE * scale;
         let corner_radius = theme::CORNER_RADIUS * scale;
 
+        #[allow(clippy::unwrap_used)]
         let mut side = Pixmap::new(shadow_size, 1).unwrap();
         for x in 0..side.width() as usize {
             let alpha = (shadow(x as f32 + 0.5, scale, active) * u8::MAX as f32).round() as u8;
-            side.pixels_mut()[x] = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
+
+            #[allow(clippy::unwrap_used)]
+            let color = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
+            side.pixels_mut()[x] = color;
         }
 
         let edges_size = (corner_radius + shadow_size) * 2;
+        #[allow(clippy::unwrap_used)]
         let mut edges = Pixmap::new(edges_size, edges_size).unwrap();
         let edges_middle = Point::from_xy(edges_size as f32 / 2.0, edges_size as f32 / 2.0);
         for y in 0..edges_size as usize {
@@ -44,8 +49,10 @@ impl RenderedShadow {
                 let dist = edges_middle.distance(Point::from_xy(x as f32 + 0.5, y_pos))
                     - corner_radius as f32;
                 let alpha = (shadow(dist, scale, active) * u8::MAX as f32).round() as u8;
-                edges.pixels_mut()[y * edges_size as usize + x] =
-                    PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
+
+                #[allow(clippy::unwrap_used)]
+                let color = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
+                edges.pixels_mut()[y * edges_size as usize + x] = color;
             }
         }
 
@@ -327,6 +334,7 @@ impl CachedPart {
         active: bool,
         part_idx: usize,
     ) -> CachedPart {
+        #[allow(clippy::unwrap_used)]
         let mut pixmap = Pixmap::new(dst_pixmap.width(), dst_pixmap.height()).unwrap();
         rendered.draw(&mut pixmap.as_mut(), scale, part_idx);
 
@@ -382,6 +390,8 @@ impl Shadow {
             ));
         }
 
+        // We filled the cache above.
+        #[allow(clippy::unwrap_used)]
         cache.as_ref().unwrap().draw(pixmap);
     }
 }

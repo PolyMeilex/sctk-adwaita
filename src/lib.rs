@@ -357,7 +357,7 @@ where
             }
 
             if let Some(input_rect) = part.input_rect {
-                let input_region = Region::new(&*self.compositor).unwrap();
+                let input_region = Region::new(&*self.compositor).ok()?;
                 input_region.add(
                     input_rect.x,
                     input_rect.y,

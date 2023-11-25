@@ -147,6 +147,9 @@ impl DecorationParts {
         }
     }
 
+    // These unwraps are guaranteed to succeed because the affected options are filled above
+    // and then never emptied afterwards.
+    #[allow(clippy::unwrap_used)]
     pub fn resize(&mut self, width: u32, height: u32) {
         self.parts[Self::HEADER].surface_rect.width = width;
 
