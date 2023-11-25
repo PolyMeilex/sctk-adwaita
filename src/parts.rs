@@ -126,6 +126,10 @@ impl DecorationParts {
         &self.parts[Self::HEADER]
     }
 
+    pub fn side_height(&self) -> u32 {
+        self.parts[Self::LEFT].height
+    }
+
     pub fn find_surface(&self, surface: &ObjectId) -> Location {
         let pos = match self
             .parts
