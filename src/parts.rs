@@ -9,7 +9,7 @@ use smithay_client_toolkit::{
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
-use crate::theme::{BORDER_SIZE, HEADER_SIZE};
+use crate::theme::{BORDER_SIZE, HEADER_SIZE, RESIZE_HANDLE_SIZE};
 use crate::{pointer::Location, wl_typed::WlTyped};
 
 /// The decoration's 'parts'.
@@ -20,11 +20,13 @@ pub struct DecorationParts {
 
 impl DecorationParts {
     // XXX keep in sync with `Self;:new`.
-    pub const HEADER: usize = 0;
-    pub const TOP: usize = 1;
-    pub const LEFT: usize = 2;
-    pub const RIGHT: usize = 3;
-    pub const BOTTOM: usize = 4;
+    // Order is important. The lower the number, the earlier the part gets drawn.
+    // Because the header can overlap other parts, we draw it last.
+    pub const TOP: usize = 0;
+    pub const LEFT: usize = 1;
+    pub const RIGHT: usize = 2;
+    pub const BOTTOM: usize = 3;
+    pub const HEADER: usize = 4;
 
     pub fn new<State>(
         base_surface: &WlTyped<WlSurface, SurfaceData>,
@@ -36,53 +38,90 @@ impl DecorationParts {
     {
         // XXX the order must be in sync with associated constants.
         let parts = [
-            // Header.
-            Part::new(
-                base_surface,
-                subcompositor,
-                queue_handle,
-                0,
-                HEADER_SIZE,
-                (0, -(HEADER_SIZE as i32)),
-            ),
             // Top.
             Part::new(
                 base_surface,
                 subcompositor,
                 queue_handle,
-                0,
-                BORDER_SIZE,
-                (
-                    -(BORDER_SIZE as i32),
-                    -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
-                ),
+                Rect {
+                    x: -(BORDER_SIZE as i32),
+                    y: -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                    width: 0, // Defined by `Self::resize`.
+                    height: BORDER_SIZE,
+                },
+                Some(Rect {
+                    x: BORDER_SIZE as i32 - RESIZE_HANDLE_SIZE as i32,
+                    y: BORDER_SIZE as i32 - RESIZE_HANDLE_SIZE as i32,
+                    width: 0, // Defined by `Self::resize`.
+                    height: RESIZE_HANDLE_SIZE,
+                }),
             ),
             // Left.
             Part::new(
                 base_surface,
                 subcompositor,
                 queue_handle,
-                BORDER_SIZE,
-                0,
-                (-(BORDER_SIZE as i32), -(HEADER_SIZE as i32)),
+                Rect {
+                    x: -(BORDER_SIZE as i32),
+                    y: -(HEADER_SIZE as i32),
+                    width: BORDER_SIZE,
+                    height: 0, // Defined by `Self::resize`.
+                },
+                Some(Rect {
+                    x: BORDER_SIZE as i32 - RESIZE_HANDLE_SIZE as i32,
+                    y: 0,
+                    width: RESIZE_HANDLE_SIZE,
+                    height: 0, // Defined by `Self::resize`.
+                }),
             ),
             // Right.
             Part::new(
                 base_surface,
                 subcompositor,
                 queue_handle,
-                BORDER_SIZE,
-                0,
-                (-(BORDER_SIZE as i32), -(HEADER_SIZE as i32)),
+                Rect {
+                    x: 0, // Defined by `Self::resize`.
+                    y: -(HEADER_SIZE as i32),
+                    width: BORDER_SIZE,
+                    height: 0, // Defined by `Self::resize`.
+                },
+                Some(Rect {
+                    x: 0,
+                    y: 0,
+                    width: RESIZE_HANDLE_SIZE,
+                    height: 0, // Defined by `Self::resize`.
+                }),
             ),
             // Bottom.
             Part::new(
                 base_surface,
                 subcompositor,
                 queue_handle,
-                0,
-                BORDER_SIZE,
-                (-(BORDER_SIZE as i32), 0),
+                Rect {
+                    x: -(BORDER_SIZE as i32),
+                    y: 0,     // Defined by `Self::resize`.
+                    width: 0, // Defined by `Self::resize`.
+                    height: BORDER_SIZE,
+                },
+                Some(Rect {
+                    x: BORDER_SIZE as i32 - RESIZE_HANDLE_SIZE as i32,
+                    y: 0,
+                    width: 0, // Defined by `Self::resize`,
+                    height: RESIZE_HANDLE_SIZE,
+                }),
+            ),
+            // Header.
+            Part::new(
+                base_surface,
+                subcompositor,
+                queue_handle,
+                Rect {
+                    x: 0,
+                    y: -(HEADER_SIZE as i32),
+                    width: 0, // Defined by `Self::resize`.
+                    height: HEADER_SIZE,
+                },
+                None,
             ),
         ];
 
@@ -108,18 +147,30 @@ impl DecorationParts {
         }
     }
 
+    // These unwraps are guaranteed to succeed because the affected options are filled above
+    // and then never emptied afterwards.
+    #[allow(clippy::unwrap_used)]
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.parts[Self::HEADER].width = width;
+        self.parts[Self::HEADER].surface_rect.width = width;
 
-        self.parts[Self::BOTTOM].width = width + 2 * BORDER_SIZE;
-        self.parts[Self::BOTTOM].pos.1 = height as i32;
+        self.parts[Self::BOTTOM].surface_rect.width = width + 2 * BORDER_SIZE;
+        self.parts[Self::BOTTOM].surface_rect.y = height as i32;
+        self.parts[Self::BOTTOM].input_rect.as_mut().unwrap().width =
+            self.parts[Self::BOTTOM].surface_rect.width - (BORDER_SIZE * 2)
+                + (RESIZE_HANDLE_SIZE * 2);
 
-        self.parts[Self::TOP].width = self.parts[Self::BOTTOM].width;
+        self.parts[Self::TOP].surface_rect.width = self.parts[Self::BOTTOM].surface_rect.width;
+        self.parts[Self::TOP].input_rect.as_mut().unwrap().width =
+            self.parts[Self::TOP].surface_rect.width - (BORDER_SIZE * 2) + (RESIZE_HANDLE_SIZE * 2);
 
-        self.parts[Self::LEFT].height = height + HEADER_SIZE;
+        self.parts[Self::LEFT].surface_rect.height = height + HEADER_SIZE;
+        self.parts[Self::LEFT].input_rect.as_mut().unwrap().height =
+            self.parts[Self::LEFT].surface_rect.height;
 
-        self.parts[Self::RIGHT].height = self.parts[Self::LEFT].height;
-        self.parts[Self::RIGHT].pos.0 = width as i32;
+        self.parts[Self::RIGHT].surface_rect.height = self.parts[Self::LEFT].surface_rect.height;
+        self.parts[Self::RIGHT].surface_rect.x = width as i32;
+        self.parts[Self::RIGHT].input_rect.as_mut().unwrap().height =
+            self.parts[Self::RIGHT].surface_rect.height;
     }
 
     pub fn header(&self) -> &Part {
@@ -127,7 +178,7 @@ impl DecorationParts {
     }
 
     pub fn side_height(&self) -> u32 {
-        self.parts[Self::LEFT].height
+        self.parts[Self::LEFT].surface_rect.height
     }
 
     pub fn find_surface(&self, surface: &ObjectId) -> Location {
@@ -151,15 +202,25 @@ impl DecorationParts {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Rect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
 #[derive(Debug)]
 pub struct Part {
     pub surface: WlTyped<WlSurface, SurfaceData>,
     pub subsurface: WlTyped<WlSubsurface, SubsurfaceData>,
 
-    pub width: u32,
-    pub height: u32,
-
-    pub pos: (i32, i32),
+    /// Positioned relative to the main surface.
+    pub surface_rect: Rect,
+    /// Positioned relative to the local surface, aka. `surface_rect`.
+    ///
+    /// `None` if it fully covers `surface_rect`.
+    pub input_rect: Option<Rect>,
 }
 
 impl Part {
@@ -167,9 +228,8 @@ impl Part {
         parent: &WlTyped<WlSurface, SurfaceData>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
-        width: u32,
-        height: u32,
-        pos: (i32, i32),
+        surface_rect: Rect,
+        input_rect: Option<Rect>,
     ) -> Part
     where
         State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
@@ -186,9 +246,8 @@ impl Part {
         Part {
             surface,
             subsurface,
-            width,
-            height,
-            pos,
+            surface_rect,
+            input_rect,
         }
     }
 }
