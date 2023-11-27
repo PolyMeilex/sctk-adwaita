@@ -1,7 +1,11 @@
 pub use tiny_skia::Color;
 use tiny_skia::{Paint, Shader};
 
-pub(crate) const BORDER_SIZE: u32 = 10;
+// https://gitlab.gnome.org/GNOME/gtk/-/blob/1bf88f1d81043fd99740e2f91e56ade7ede7303b/gtk/gtkwindow.c#L165
+pub(crate) const RESIZE_HANDLE_SIZE: u32 = 12;
+// https://gitlab.gnome.org/GNOME/gtk/-/blob/1bf88f1d81043fd99740e2f91e56ade7ede7303b/gtk/gtkwindow.c#L166
+pub(crate) const RESIZE_HANDLE_CORNER_SIZE: u32 = 24;
+pub(crate) const BORDER_SIZE: u32 = VISIBLE_BORDER_SIZE + RESIZE_HANDLE_SIZE;
 pub(crate) const HEADER_SIZE: u32 = 35;
 pub(crate) const CORNER_RADIUS: u32 = 10;
 pub(crate) const VISIBLE_BORDER_SIZE: u32 = 1;

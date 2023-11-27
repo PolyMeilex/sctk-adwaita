@@ -33,7 +33,8 @@ mod title;
 mod wl_typed;
 
 use crate::theme::{
-    ColorMap, ColorTheme, BORDER_SIZE, CORNER_RADIUS, HEADER_SIZE, VISIBLE_BORDER_SIZE,
+    ColorMap, ColorTheme, BORDER_SIZE, CORNER_RADIUS, HEADER_SIZE, RESIZE_HANDLE_CORNER_SIZE,
+    VISIBLE_BORDER_SIZE,
 };
 
 use buttons::Buttons;
@@ -134,25 +135,56 @@ where
         self.dirty = true;
     }
 
-    fn precise_location(&self, location: Location, header_width: u32, x: f64, y: f64) -> Location {
+    fn precise_location(
+        &self,
+        location: Location,
+        decoration: &DecorationParts,
+        x: f64,
+        y: f64,
+    ) -> Location {
+        let header_width = decoration.header().width;
+        let side_height = decoration.side_height();
+
+        let left_corner_x = BORDER_SIZE + RESIZE_HANDLE_CORNER_SIZE;
+        let right_corner_x = (header_width + BORDER_SIZE).saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
+        let top_corner_y = RESIZE_HANDLE_CORNER_SIZE;
+        let bottom_corner_y = side_height.saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
         match location {
             Location::Head | Location::Button(_) => self.buttons.find_button(x, y),
             Location::Top | Location::TopLeft | Location::TopRight => {
-                if x <= f64::from(BORDER_SIZE) {
+                if x <= f64::from(left_corner_x) {
                     Location::TopLeft
-                } else if x >= f64::from(header_width + BORDER_SIZE) {
+                } else if x >= f64::from(right_corner_x) {
                     Location::TopRight
                 } else {
                     Location::Top
                 }
             }
             Location::Bottom | Location::BottomLeft | Location::BottomRight => {
-                if x <= f64::from(BORDER_SIZE) {
+                if x <= f64::from(left_corner_x) {
                     Location::BottomLeft
-                } else if x >= f64::from(header_width + BORDER_SIZE) {
+                } else if x >= f64::from(right_corner_x) {
                     Location::BottomRight
                 } else {
                     Location::Bottom
+                }
+            }
+            Location::Left => {
+                if y <= f64::from(top_corner_y) {
+                    Location::TopLeft
+                } else if y >= f64::from(bottom_corner_y) {
+                    Location::BottomLeft
+                } else {
+                    Location::Left
+                }
+            }
+            Location::Right => {
+                if y <= f64::from(top_corner_y) {
+                    Location::TopRight
+                } else if y >= f64::from(bottom_corner_y) {
+                    Location::BottomRight
+                } else {
+                    Location::Right
                 }
             }
             other => other,
@@ -454,10 +486,9 @@ where
             return None;
         }
 
-        let header_width = decorations.header().width;
         let old_location = self.mouse.location;
 
-        let location = self.precise_location(location, header_width, x, y);
+        let location = self.precise_location(location, decorations, x, y);
         let new_cursor = self.mouse.moved(location, x, y, self.resizable);
 
         // Set dirty if we moved the cursor between the buttons.
