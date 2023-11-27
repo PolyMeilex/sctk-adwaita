@@ -324,18 +324,18 @@ impl Button {
 
                     let x = x - hsize;
                     let y = y - hsize;
-                    if let Some(rect) = Rect::from_xywh(x, y, size, size) {
-                        pb.push_rect(rect);
-                    }
-
                     if state.contains(WindowState::MAXIMIZED) {
+                        let offset = 2.0 * scale;
                         if let Some(rect) =
-                            Rect::from_xywh(x + 2.0 * scale, y - 2.0 * scale, size, size)
+                            Rect::from_xywh(x, y + offset, size - offset, size - offset)
                         {
-                            pb.move_to(rect.left(), rect.top());
-                            pb.line_to(rect.right(), rect.top());
-                            pb.line_to(rect.right(), rect.bottom());
+                            pb.push_rect(rect);
+                            pb.move_to(rect.left() + offset, rect.top() - offset);
+                            pb.line_to(rect.right() + offset, rect.top() - offset);
+                            pb.line_to(rect.right() + offset, rect.bottom() - offset + 0.5);
                         }
+                    } else if let Some(rect) = Rect::from_xywh(x, y, size, size) {
+                        pb.push_rect(rect);
                     }
 
                     pb.finish()?
