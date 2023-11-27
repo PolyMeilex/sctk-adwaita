@@ -144,10 +144,14 @@ impl CompositorHandler for SimpleWindow {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
-        _new_factor: i32,
+        surface: &wl_surface::WlSurface,
+        new_factor: i32,
     ) {
-        // Not needed for this example.
+        if self.window.wl_surface() == surface {
+            if let Some(frame) = self.window_frame.as_mut() {
+                frame.set_scaling_factor(new_factor as f64);
+            }
+        }
     }
 
     fn transform_changed(
