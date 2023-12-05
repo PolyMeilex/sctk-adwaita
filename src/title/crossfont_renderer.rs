@@ -1,6 +1,9 @@
-use crate::title::config;
+use std::mem;
+
 use crossfont::{GlyphKey, Rasterize, RasterizedGlyph};
 use tiny_skia::{Color, Pixmap, PixmapPaint, PixmapRef, Transform};
+
+use crate::title::config;
 
 pub struct CrossfontTitleText {
     title: String,
@@ -32,7 +35,6 @@ impl std::fmt::Debug for CrossfontTitleText {
 impl CrossfontTitleText {
     pub fn new(color: Color) -> Result<Self, crossfont::Error> {
         let title = "".into();
-        let scale = 1;
 
         let font_pref = config::titlebar_font().unwrap_or_default();
         let font_style = font_pref
@@ -44,7 +46,7 @@ impl CrossfontTitleText {
             });
         let font_desc = crossfont::FontDesc::new(&font_pref.name, font_style);
 
-        let mut rasterizer = crossfont::Rasterizer::new(scale as f32)?;
+        let mut rasterizer = crossfont::Rasterizer::new()?;
         let size = crossfont::Size::new(font_pref.pt_size);
         let font_key = rasterizer.load_font(&font_desc, size)?;
 
@@ -60,15 +62,15 @@ impl CrossfontTitleText {
         let metrics = rasterizer.metrics(font_key, size)?;
 
         let mut this = Self {
-            title,
+            pixmap: None,
+            rasterizer,
             font_desc,
             font_key,
-            size,
-            scale,
+            scale: 1,
             metrics,
-            rasterizer,
+            title,
             color,
-            pixmap: None,
+            size,
         };
 
         this.rerender();
@@ -87,12 +89,10 @@ impl CrossfontTitleText {
     }
 
     pub fn update_scale(&mut self, scale: u32) {
-        if self.scale != scale {
-            self.rasterizer.update_dpr(scale as f32);
-            self.scale = scale;
-
+        let old_scale = mem::replace(&mut self.scale, scale);
+        if old_scale != self.scale {
+            self.size = self.size.scale(self.scale as f32 / old_scale as f32);
             self.update_metrics().ok();
-
             self.rerender();
         }
     }
