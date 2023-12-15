@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Improved roundness of headerbar (#51)
+
 ## 0.8.0
 - **Braking:** `AdwaitaFrame::new` now takes `Arc<CompositorState>` as an argument
 - Fix leftmost title pixel sometimes being cut off (#45)

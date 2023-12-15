@@ -710,7 +710,8 @@ fn draw_headerbar_bg(
 }
 
 fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32) -> Option<Path> {
-    use std::f32::consts::FRAC_1_SQRT_2;
+    // https://stackoverflow.com/a/27863181
+    let cubic_bezier_circle = 0.552_284_8 * radius;
 
     let mut pb = PathBuilder::new();
     let mut cursor = Point::from_xy(x, y);
@@ -725,20 +726,16 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
     pb.move_to(cursor.x, cursor.y);
 
     // Drawing the outline
+    let next = Point::from_xy(cursor.x + radius, cursor.y - radius);
     pb.cubic_to(
         cursor.x,
-        cursor.y,
-        cursor.x,
-        cursor.y - FRAC_1_SQRT_2 * radius,
-        {
-            cursor.x += radius;
-            cursor.x
-        },
-        {
-            cursor.y -= radius;
-            cursor.y
-        },
+        cursor.y - cubic_bezier_circle,
+        next.x - cubic_bezier_circle,
+        next.y,
+        next.x,
+        next.y,
     );
+    cursor = next;
     pb.line_to(
         {
             cursor.x = x + width - radius;
@@ -746,20 +743,16 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
         },
         cursor.y,
     );
+    let next = Point::from_xy(cursor.x + radius, cursor.y + radius);
     pb.cubic_to(
-        cursor.x,
+        cursor.x + cubic_bezier_circle,
         cursor.y,
-        cursor.x + FRAC_1_SQRT_2 * radius,
-        cursor.y,
-        {
-            cursor.x += radius;
-            cursor.x
-        },
-        {
-            cursor.y += radius;
-            cursor.y
-        },
+        next.x,
+        next.y - cubic_bezier_circle,
+        next.x,
+        next.y,
     );
+    cursor = next;
     pb.line_to(cursor.x, {
         cursor.y = y + height;
         cursor.y
