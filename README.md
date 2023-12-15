@@ -1,4 +1,11 @@
+### Shadows tuned to match the shadows on MY machine
+
+![](./showcase.png)
+
+The origininal is ugly and MUST be removed.
+
 # Adwaita-like SCTK Frame
+
 
 |   |   |
 |---|---|

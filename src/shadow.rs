@@ -4,9 +4,18 @@ use tiny_skia::{Pixmap, PixmapMut, PixmapRef, Point, PremultipliedColorU8};
 
 // These values were generated from a screenshot of an libadwaita window using a script.
 // For more details see: https://github.com/PolyMeilex/sctk-adwaita/pull/43
-pub const SHADOW_SIZE: u32 = 43;
-const SHADOW_PARAMS_ACTIVE: (f32, f32, f32) = (0.206_505_5, 0.104_617_53, -0.000_542_446_2);
-const SHADOW_PARAMS_INACTIVE: (f32, f32, f32) = (0.168_297_29, 0.204_299_8, 0.001_769_798_6);
+pub const SHADOW_SIZE: u32 = 12;
+pub const SHADOW_SIZE_INACTIVE: u32 = 8;
+const SHADOW_PARAMS_ACTIVE: (f32, f32, f32) = (
+    0.25590275750629643,
+    0.40021155248259516,
+    -0.000581275541300512,
+);
+const SHADOW_PARAMS_INACTIVE: (f32, f32, f32) = (
+    0.13824488903628537,
+    0.5253700031835654,
+    -0.00022971417831923807,
+);
 
 fn shadow(pixel_dist: f32, scale: u32, active: bool) -> f32 {
     let (a, b, c) = if active {
@@ -26,11 +35,15 @@ struct RenderedShadow {
 
 impl RenderedShadow {
     fn new(scale: u32, active: bool) -> RenderedShadow {
-        let shadow_size = SHADOW_SIZE * scale;
+        let shadow_size = if active {
+            SHADOW_SIZE
+        } else {
+            SHADOW_SIZE_INACTIVE
+        } * scale;
         let corner_radius = theme::CORNER_RADIUS * scale;
 
         #[allow(clippy::unwrap_used)]
-        let mut side = Pixmap::new(shadow_size, 1).unwrap();
+        let mut side = Pixmap::new(SHADOW_SIZE, 1).unwrap();
         for x in 0..side.width() as usize {
             let alpha = (shadow(x as f32 + 0.5, scale, active) * u8::MAX as f32).round() as u8;
 
@@ -39,16 +52,17 @@ impl RenderedShadow {
             side.pixels_mut()[x] = color;
         }
 
-        let edges_size = (corner_radius + shadow_size) * 2;
+        let edges_size = (corner_radius + SHADOW_SIZE) * 2;
+        let edges_size_small = (corner_radius + shadow_size) * 2;
         #[allow(clippy::unwrap_used)]
         let mut edges = Pixmap::new(edges_size, edges_size).unwrap();
         let edges_middle = Point::from_xy(edges_size as f32 / 2.0, edges_size as f32 / 2.0);
-        for y in 0..edges_size as usize {
+        for y in 0..edges_size_small as usize {
             let y_pos = y as f32 + 0.5;
-            for x in 0..edges_size as usize {
+            for x in 0..edges_size_small as usize {
                 let dist = edges_middle.distance(Point::from_xy(x as f32 + 0.5, y_pos))
                     - corner_radius as f32;
-                let alpha = (shadow(dist, scale, active) * u8::MAX as f32).round() as u8;
+                let alpha = (shadow(dist, scale, active) * u8::MAX as f32).round() as u8 ;
 
                 #[allow(clippy::unwrap_used)]
                 let color = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
