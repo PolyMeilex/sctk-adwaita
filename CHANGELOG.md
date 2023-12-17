@@ -1,9 +1,10 @@
 ## [Unreleased]
 
+- Fix `ab_glyph` renderer panicking with integer scale factor 3 (#50)
 - Improved roundness of headerbar (#51)
 
 ## 0.8.0
-- **Braking:** `AdwaitaFrame::new` now takes `Arc<CompositorState>` as an argument
+- **Breaking:** `AdwaitaFrame::new` now takes `Arc<CompositorState>` as an argument
 - Fix leftmost title pixel sometimes being cut off (#45)
 - Fix transparency in ab_glyph renderer (#44)
 - Extended resize corners (#47)

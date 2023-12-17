@@ -80,8 +80,10 @@ impl AbGlyphTitleText {
 
         let glyphs = self.layout(&font);
         let last_glyph = glyphs.last()?;
-        let width = (last_glyph.position.x + font.h_advance(last_glyph.id)).ceil() as u32;
-        let height = font.height().ceil() as u32;
+        // + 2 because ab_glyph likes to draw outside of its area,
+        // so we add 1px border around the pixmap
+        let width = (last_glyph.position.x + font.h_advance(last_glyph.id)).ceil() as u32 + 2;
+        let height = font.height().ceil() as u32 + 2;
 
         let mut pixmap = Pixmap::new(width, height)?;
 
@@ -97,7 +99,8 @@ impl AbGlyphTitleText {
                     // same as 1.0. For our purposes, we need to contrain this value.
                     let c = c.min(1.0);
 
-                    let p_idx = (top + y) * width + (left + x);
+                    // offset the index by 1, so it is in the center of the pixmap
+                    let p_idx = (top + y + 1) * width + (left + x + 1);
                     let old_alpha_u8 = pixels[p_idx as usize].alpha();
                     let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
                     if let Some(px) = PremultipliedColorU8::from_rgba(
