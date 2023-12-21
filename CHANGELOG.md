@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+## 0.8.1
 - Fix `ab_glyph` renderer panicking with integer scale factor 3 (#50)
 - Improved roundness of headerbar (#51)
 
