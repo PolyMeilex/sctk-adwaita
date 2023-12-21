@@ -19,7 +19,7 @@ tiny-skia = { version = "0.11", default-features = false, features = [
 smithay-client-toolkit = { version = "0.18.0", default_features = false }
 
 # Draw title text using crossfont `--features crossfont`
-crossfont = { version = "0.6.0", features = [
+crossfont = { version = "0.7.0", features = [
   "force_system_fontconfig",
 ], optional = true }
 # Draw title text using ab_glyph `--features ab_glyph`
