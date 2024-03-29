@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+## 0.8.2
+- Bump crossfont to 0.8.0 (#60)
+
 ## 0.8.1
 - Fix `ab_glyph` renderer panicking with integer scale factor 3 (#50)
 - Improved roundness of headerbar (#51)
