@@ -1,6 +1,6 @@
 [package]
 name = "sctk-adwaita"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2021"
 authors = ["Poly <marynczak.bartlomiej@gmail.com>"]
 keywords = ["sctk"]

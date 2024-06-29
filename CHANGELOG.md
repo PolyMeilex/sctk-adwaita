@@ -1,6 +1,9 @@
 ## [Unreleased]
 
-## 0.8.2
+## 0.10.0
+- Bump sctk to 0.19
+
+## 0.9.0
 - Bump crossfont to 0.8.0 (#60)
 
 ## 0.8.1
