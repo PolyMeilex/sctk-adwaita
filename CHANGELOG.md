@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Panic hardening of ab-glyph (#64)
 
 ## 0.10.0
 - Bump sctk to 0.19
