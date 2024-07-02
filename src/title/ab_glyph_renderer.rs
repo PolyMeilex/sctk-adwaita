@@ -96,12 +96,18 @@ impl AbGlyphTitleText {
                 let top = bounds.min.y as u32;
                 outline.draw(|x, y, c| {
                     // `ab_glyph` may return values greater than 1.0, but they are defined to be
-                    // same as 1.0. For our purposes, we need to contrain this value.
+                    // same as 1.0. For our purposes, we need to constrain this value.
                     let c = c.min(1.0);
 
                     // offset the index by 1, so it is in the center of the pixmap
                     let p_idx = (top + y + 1) * width + (left + x + 1);
-                    let old_alpha_u8 = pixels[p_idx as usize].alpha();
+                    let Some(pixel) = pixels.get_mut(p_idx as usize) else {
+                        log::warn!("Ignoring out of range pixel (pixel id: {p_idx}");
+                        return;
+                    };
+
+                    let old_alpha_u8 = pixel.alpha();
+
                     let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
                     if let Some(px) = PremultipliedColorU8::from_rgba(
                         (self.color.red() * new_alpha * 255.0) as _,
@@ -109,7 +115,7 @@ impl AbGlyphTitleText {
                         (self.color.blue() * new_alpha * 255.0) as _,
                         (new_alpha * 255.0) as _,
                     ) {
-                        pixels[p_idx as usize] = px;
+                        *pixel = px;
                     }
                 })
             }
