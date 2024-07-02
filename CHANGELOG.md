@@ -1,4 +1,6 @@
 ## [Unreleased]
+
+## 0.10.1
 - Panic hardening of ab-glyph (#64)
 
 ## 0.10.0
