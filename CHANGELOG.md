@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
 
 ## 0.10.1
 - Panic hardening of ab-glyph (#64)
