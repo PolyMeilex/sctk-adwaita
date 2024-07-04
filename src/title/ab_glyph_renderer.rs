@@ -78,53 +78,71 @@ impl AbGlyphTitleText {
         let font = parse_font(&self.font);
         let font = font.as_scaled(self.size);
 
-        let glyphs = self.layout(&font);
-        let last_glyph = glyphs.last()?;
-        // + 2 because ab_glyph likes to draw outside of its area,
-        // so we add 1px border around the pixmap
-        let width = (last_glyph.position.x + font.h_advance(last_glyph.id)).ceil() as u32 + 2;
-        let height = font.height().ceil() as u32 + 2;
+        let glyphs: Vec<_> = self
+            .layout(&font)
+            .into_iter()
+            .filter_map(|g| font.outline_glyph(g))
+            .collect();
 
-        let mut pixmap = Pixmap::new(width, height)?;
+        // calc combined px bound coordinates of the rendered glyphs
+        // Note: It is possible for min.x to be negative, e.g. the first glyph's
+        //       outline extends a little out to the left further than the layout x origin 0.0
+        let all_px_bounds = glyphs.iter().map(|g| g.px_bounds()).reduce(|mut b, next| {
+            b.min.x = b.min.x.min(next.min.x);
+            b.max.x = b.max.x.max(next.max.x);
+            // min(0.0): consistently allocate enough for the whole ascent even
+            //           if all glyphs don't need that much, makes positioning easier later.
+            //           If removed the pixmap will be exactly sized, but we'd need a
+            //           vertical offset to render, say "Tg" vs "gg", consistently
+            b.min.y = b.min.y.min(next.min.y).min(0.0);
+            b.max.y = b.max.y.max(next.max.y);
+            b
+        })?;
 
+        let width = all_px_bounds.width() as _;
+        let mut pixmap = Pixmap::new(width, all_px_bounds.height() as _)?;
         let pixels = pixmap.pixels_mut();
 
         for glyph in glyphs {
-            if let Some(outline) = font.outline_glyph(glyph) {
-                let bounds = outline.px_bounds();
-                let left = bounds.min.x as u32;
-                let top = bounds.min.y as u32;
-                outline.draw(|x, y, c| {
-                    // `ab_glyph` may return values greater than 1.0, but they are defined to be
-                    // same as 1.0. For our purposes, we need to constrain this value.
-                    let c = c.min(1.0);
+            let bounds = glyph.px_bounds();
+            // calc top/left ords in pixmap space
+            // pixmap-x=0 means the *left most pixel*, equivalent to
+            // px_bounds.min.x which *may be non-zero* (and similarly with y)
+            // so `- px_bounds.min` converts the left-most/top-most to 0
+            let pixmap_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
+            let pixmap_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
+            glyph.draw(|x, y, c| {
+                // `ab_glyph` may return values greater than 1.0, but they are defined to be
+                // same as 1.0. For our purposes, we need to constrain this value.
+                let c = c.min(1.0);
 
-                    // offset the index by 1, so it is in the center of the pixmap
-                    let p_idx = (top + y + 1) * width + (left + x + 1);
-                    let Some(pixel) = pixels.get_mut(p_idx as usize) else {
-                        log::warn!("Ignoring out of range pixel (pixel id: {p_idx}");
-                        return;
-                    };
+                let p_idx = (pixmap_top + y) * width + pixmap_left + x;
+                let Some(pixel) = pixels.get_mut(p_idx as usize) else {
+                    debug_assert!(
+                        false,
+                        "oob pixel: x={x} y={y} top={pixmap_top} left={pixmap_left}, w={width}"
+                    );
+                    return;
+                };
 
-                    let old_alpha_u8 = pixel.alpha();
+                let old_alpha_u8 = pixel.alpha();
 
-                    let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
-                    if let Some(px) = PremultipliedColorU8::from_rgba(
-                        (self.color.red() * new_alpha * 255.0) as _,
-                        (self.color.green() * new_alpha * 255.0) as _,
-                        (self.color.blue() * new_alpha * 255.0) as _,
-                        (new_alpha * 255.0) as _,
-                    ) {
-                        *pixel = px;
-                    }
-                })
-            }
+                let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
+                if let Some(px) = PremultipliedColorU8::from_rgba(
+                    (self.color.red() * new_alpha * 255.0) as _,
+                    (self.color.green() * new_alpha * 255.0) as _,
+                    (self.color.blue() * new_alpha * 255.0) as _,
+                    (new_alpha * 255.0) as _,
+                ) {
+                    *pixel = px;
+                }
+            })
         }
 
         Some(pixmap)
     }
 
-    /// Simple single-line glyph layout.
+    /// Simple single-line glyph layout starting from `(0, ascent)`.
     fn layout(&self, font: &PxScaleFont<impl Font>) -> Vec<Glyph> {
         let mut caret = point(0.0, font.ascent());
         let mut last_glyph: Option<Glyph> = None;
