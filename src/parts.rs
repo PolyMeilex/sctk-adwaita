@@ -16,6 +16,7 @@ use crate::{pointer::Location, wl_typed::WlTyped};
 #[derive(Debug)]
 pub struct DecorationParts {
     parts: [Part; 5],
+    hide_titlebar: bool,
 }
 
 impl DecorationParts {
@@ -32,10 +33,13 @@ impl DecorationParts {
         base_surface: &WlTyped<WlSurface, SurfaceData>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
+        hide_titlebar: bool,
     ) -> Self
     where
         State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
     {
+        let header_offset = if hide_titlebar { 0 } else { HEADER_SIZE };
+
         // XXX the order must be in sync with associated constants.
         let parts = [
             // Top.
@@ -45,7 +49,7 @@ impl DecorationParts {
                 queue_handle,
                 Rect {
                     x: -(BORDER_SIZE as i32),
-                    y: -(HEADER_SIZE as i32 + BORDER_SIZE as i32),
+                    y: -(header_offset as i32 + BORDER_SIZE as i32),
                     width: 0, // Defined by `Self::resize`.
                     height: BORDER_SIZE,
                 },
@@ -63,7 +67,7 @@ impl DecorationParts {
                 queue_handle,
                 Rect {
                     x: -(BORDER_SIZE as i32),
-                    y: -(HEADER_SIZE as i32),
+                    y: -(header_offset as i32),
                     width: BORDER_SIZE,
                     height: 0, // Defined by `Self::resize`.
                 },
@@ -81,7 +85,7 @@ impl DecorationParts {
                 queue_handle,
                 Rect {
                     x: 0, // Defined by `Self::resize`.
-                    y: -(HEADER_SIZE as i32),
+                    y: -(header_offset as i32),
                     width: BORDER_SIZE,
                     height: 0, // Defined by `Self::resize`.
                 },
@@ -125,56 +129,96 @@ impl DecorationParts {
             ),
         ];
 
-        Self { parts }
+        Self {
+            parts,
+            hide_titlebar,
+        }
     }
 
     pub fn parts(&self) -> std::iter::Enumerate<std::slice::Iter<Part>> {
         self.parts.iter().enumerate()
     }
 
-    pub fn hide(&self) {
-        for part in self.parts.iter() {
+    pub fn parts_mut(&mut self) -> std::iter::Enumerate<std::slice::IterMut<Part>> {
+        self.parts.iter_mut().enumerate()
+    }
+
+    pub fn borders_mut(&mut self) -> impl Iterator<Item = &mut Part> {
+        self.parts_mut()
+            .filter(|(idx, _)| *idx != Self::HEADER)
+            .map(|(_, p)| p)
+    }
+
+    pub fn header(&self) -> &Part {
+        &self.parts[Self::HEADER]
+    }
+
+    pub fn header_mut(&mut self) -> &mut Part {
+        &mut self.parts[Self::HEADER]
+    }
+
+    pub fn hide(&mut self) {
+        for part in self.parts.iter_mut() {
+            part.hide = true;
             part.subsurface.set_sync();
             part.surface.attach(None, 0, 0);
             part.surface.commit();
         }
     }
 
-    pub fn hide_borders(&self) {
-        for (_, part) in self.parts().filter(|(idx, _)| *idx != Self::HEADER) {
+    pub fn show(&mut self) {
+        for part in self.parts.iter_mut() {
+            part.hide = false;
+        }
+    }
+
+    pub fn hide_borders(&mut self) {
+        for part in self.borders_mut() {
+            part.hide = true;
             part.surface.attach(None, 0, 0);
             part.surface.commit();
         }
     }
 
-    // These unwraps are guaranteed to succeed because the affected options are filled above
-    // and then never emptied afterwards.
-    #[allow(clippy::unwrap_used)]
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.parts[Self::HEADER].surface_rect.width = width;
-
-        self.parts[Self::BOTTOM].surface_rect.width = width + 2 * BORDER_SIZE;
-        self.parts[Self::BOTTOM].surface_rect.y = height as i32;
-        self.parts[Self::BOTTOM].input_rect.as_mut().unwrap().width =
-            self.parts[Self::BOTTOM].surface_rect.width - (BORDER_SIZE * 2)
-                + (RESIZE_HANDLE_SIZE * 2);
-
-        self.parts[Self::TOP].surface_rect.width = self.parts[Self::BOTTOM].surface_rect.width;
-        self.parts[Self::TOP].input_rect.as_mut().unwrap().width =
-            self.parts[Self::TOP].surface_rect.width - (BORDER_SIZE * 2) + (RESIZE_HANDLE_SIZE * 2);
-
-        self.parts[Self::LEFT].surface_rect.height = height + HEADER_SIZE;
-        self.parts[Self::LEFT].input_rect.as_mut().unwrap().height =
-            self.parts[Self::LEFT].surface_rect.height;
-
-        self.parts[Self::RIGHT].surface_rect.height = self.parts[Self::LEFT].surface_rect.height;
-        self.parts[Self::RIGHT].surface_rect.x = width as i32;
-        self.parts[Self::RIGHT].input_rect.as_mut().unwrap().height =
-            self.parts[Self::RIGHT].surface_rect.height;
+    pub fn hide_titlebar(&mut self) {
+        let part = self.header_mut();
+        part.hide = true;
+        part.surface.attach(None, 0, 0);
+        part.surface.commit();
     }
 
-    pub fn header(&self) -> &Part {
-        &self.parts[Self::HEADER]
+    // These unwraps are guaranteed to succeed because the affected options are filled above
+    // and then never emptied afterwards.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        let header_size = if self.hide_titlebar { 0 } else { HEADER_SIZE };
+        let height_with_header = height + header_size;
+
+        let width_with_border = width + 2 * BORDER_SIZE;
+        let width_input_rect = width_with_border - (BORDER_SIZE * 2) + (RESIZE_HANDLE_SIZE * 2);
+
+        self.parts[Self::HEADER].surface_rect.width = width;
+
+        self.parts[Self::BOTTOM].surface_rect.width = width_with_border;
+        self.parts[Self::BOTTOM].surface_rect.y = height as i32;
+        if let Some(input_rect) = self.parts[Self::BOTTOM].input_rect.as_mut() {
+            input_rect.width = width_input_rect;
+        }
+
+        self.parts[Self::TOP].surface_rect.width = width_with_border;
+        if let Some(input_rect) = self.parts[Self::TOP].input_rect.as_mut() {
+            input_rect.width = width_input_rect;
+        }
+
+        self.parts[Self::LEFT].surface_rect.height = height_with_header;
+        if let Some(input_rect) = self.parts[Self::LEFT].input_rect.as_mut() {
+            input_rect.height = height_with_header;
+        }
+
+        self.parts[Self::RIGHT].surface_rect.height = height_with_header;
+        self.parts[Self::RIGHT].surface_rect.x = width as i32;
+        if let Some(input_rect) = self.parts[Self::RIGHT].input_rect.as_mut() {
+            input_rect.height = height_with_header;
+        }
     }
 
     pub fn side_height(&self) -> u32 {
@@ -221,6 +265,8 @@ pub struct Part {
     ///
     /// `None` if it fully covers `surface_rect`.
     pub input_rect: Option<Rect>,
+
+    pub hide: bool,
 }
 
 impl Part {
@@ -248,6 +294,7 @@ impl Part {
             subsurface,
             surface_rect,
             input_rect,
+            hide: false,
         }
     }
 }
