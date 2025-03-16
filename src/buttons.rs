@@ -141,12 +141,10 @@ impl Buttons {
     }
 
     fn parse_button_layout(sides: Option<(String, String)>) -> Option<ButtonLayout> {
-        let Some((left_side, right_side)) = sides else {
-            return None;
-        };
+        let (left_side, right_side) = sides?;
 
-        let buttons_left = Buttons::parse_button_layout_side(left_side, Side::Left);
-        let buttons_right = Buttons::parse_button_layout_side(right_side, Side::Right);
+        let buttons_left = Buttons::parse_button_layout_side(&left_side, Side::Left);
+        let buttons_right = Buttons::parse_button_layout_side(&right_side, Side::Right);
 
         if buttons_left.is_empty() && buttons_right.is_empty() {
             warn!("No valid buttons found in configuration");
@@ -156,11 +154,16 @@ impl Buttons {
         Some((buttons_left, buttons_right))
     }
 
-    fn parse_button_layout_side(config: String, side: Side) -> Vec<Button> {
+    fn parse_button_layout_side(config: &str, side: Side) -> Vec<Button> {
+        // Ignore empty layouts
+        if config.trim().is_empty() {
+            return vec![];
+        }
+
         let mut buttons: Vec<Button> = vec![];
 
         for button in config.split(',').take(3) {
-            let button_kind = match button {
+            let button_kind = match button.trim() {
                 "close" => ButtonKind::Close,
                 "maximize" => ButtonKind::Maximize,
                 "minimize" => ButtonKind::Minimize,
@@ -169,7 +172,7 @@ impl Buttons {
                     continue;
                 }
                 _ => {
-                    warn!("Ignoring unknown button type: {button}");
+                    warn!("Ignoring unknown button type: {button:?}");
                     continue;
                 }
             };
