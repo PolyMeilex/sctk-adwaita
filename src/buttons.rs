@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::trace;
 use smithay_client_toolkit::reexports::csd_frame::{WindowManagerCapabilities, WindowState};
 use tiny_skia::{FillRule, PathBuilder, PixmapMut, Rect, Stroke, Transform};
 
@@ -147,7 +147,7 @@ impl Buttons {
         let buttons_right = Buttons::parse_button_layout_side(&right_side, Side::Right);
 
         if buttons_left.is_empty() && buttons_right.is_empty() {
-            warn!("No valid buttons found in configuration");
+            trace!("No valid buttons found in configuration");
             return None;
         }
 
@@ -167,12 +167,8 @@ impl Buttons {
                 "close" => ButtonKind::Close,
                 "maximize" => ButtonKind::Maximize,
                 "minimize" => ButtonKind::Minimize,
-                "appmenu" => {
-                    debug!("Ignoring \"appmenu\" button");
-                    continue;
-                }
                 _ => {
-                    warn!("Ignoring unknown button type: {button:?}");
+                    trace!("Ignoring unknown button type: {button:?}");
                     continue;
                 }
             };
