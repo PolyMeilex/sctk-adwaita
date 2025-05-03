@@ -102,6 +102,9 @@ pub struct AdwaitaFrame<State> {
 
     /// Draw decorations but without the titlebar
     hide_titlebar: bool,
+
+    width: NonZeroU32,
+    height: NonZeroU32,
 }
 
 impl<State> AdwaitaFrame<State>
@@ -149,6 +152,8 @@ where
             resizable: true,
             shadow: Shadow::default(),
             hide_titlebar: frame_config.hide_titlebar,
+            width: NonZeroU32::MIN,
+            height: NonZeroU32::MIN,
         })
     }
 
@@ -156,6 +161,18 @@ where
     pub fn set_config(&mut self, config: FrameConfig) {
         self.theme = config.theme;
         self.dirty = true;
+
+        if self.hide_titlebar != config.hide_titlebar {
+            self.hide_titlebar = config.hide_titlebar;
+            let mut decorations = DecorationParts::new(
+                &self.base_surface,
+                &self.subcompositor,
+                &self.queue_handle,
+                self.hide_titlebar,
+            );
+            decorations.resize(self.width.get(), self.height.get());
+            self.decorations = Some(decorations);
+        }
     }
 
     fn precise_location(
@@ -453,6 +470,9 @@ where
     }
 
     fn resize(&mut self, width: NonZeroU32, height: NonZeroU32) {
+        self.width = width;
+        self.height = height;
+
         let Some(decorations) = self.decorations.as_mut() else {
             log::error!("trying to resize the hidden frame.");
             return;

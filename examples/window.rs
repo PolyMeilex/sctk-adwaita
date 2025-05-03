@@ -101,6 +101,7 @@ fn main() {
         themed_pointer: None,
         set_cursor: false,
         cursor_icon: CursorIcon::Crosshair,
+        hide_titlebar: false,
     };
 
     // We don't draw immediately, the configure will notify us when to first draw.
@@ -137,6 +138,8 @@ struct SimpleWindow {
     themed_pointer: Option<ThemedPointer>,
     set_cursor: bool,
     cursor_icon: CursorIcon,
+
+    hide_titlebar: bool,
 }
 
 impl CompositorHandler for SimpleWindow {
@@ -251,7 +254,7 @@ impl WindowHandler for SimpleWindow {
                     self.compositor_state.clone(),
                     self.subcompositor_state.clone(),
                     qh.clone(),
-                    FrameConfig::auto(),
+                    FrameConfig::auto().hide_titlebar(self.hide_titlebar),
                 )
                 .expect("failed to create client side decorations frame.");
                 frame.set_title(self.title.clone());
@@ -447,7 +450,46 @@ impl PointerHandler for SimpleWindow {
                         }
                     } else if pressed {
                         println!("Press {:x} @ {:?}", button, event.position);
-                        self.shift = self.shift.xor(Some(0));
+
+                        // Hide/Show titlebar on right click
+                        if button == 0x111 {
+                            self.hide_titlebar = !self.hide_titlebar;
+
+                            if let Some(frame) = self.window_frame.as_mut() {
+                                // FrameConfig::auto() is not free, this shouldn't be called here
+                                let config = FrameConfig::auto();
+
+                                if self.hide_titlebar {
+                                    frame.set_config(config.hide_titlebar(true));
+                                    self.window.xdg_surface().set_window_geometry(
+                                        0,
+                                        0,
+                                        self.width.get() as i32,
+                                        self.height.get() as i32,
+                                    );
+                                } else {
+                                    let (width, height) = (self.width, self.height);
+
+                                    frame.set_config(config.hide_titlebar(false));
+                                    frame.resize(width, height);
+
+                                    let (x, y) = frame.location();
+                                    let outer_size = frame.add_borders(width.get(), height.get());
+                                    self.window.xdg_surface().set_window_geometry(
+                                        x,
+                                        y,
+                                        outer_size.0 as i32,
+                                        outer_size.1 as i32,
+                                    );
+
+                                    // Update new width and height;
+                                    self.width = width;
+                                    self.height = height;
+                                }
+                            }
+                        } else {
+                            self.shift = self.shift.xor(Some(0));
+                        }
                     }
                 }
                 Axis {
