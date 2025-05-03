@@ -101,6 +101,7 @@ fn main() {
         themed_pointer: None,
         set_cursor: false,
         cursor_icon: CursorIcon::Crosshair,
+        hide_decorations: false,
     };
 
     // We don't draw immediately, the configure will notify us when to first draw.
@@ -137,6 +138,8 @@ struct SimpleWindow {
     themed_pointer: Option<ThemedPointer>,
     set_cursor: bool,
     cursor_icon: CursorIcon,
+
+    hide_decorations: bool,
 }
 
 impl CompositorHandler for SimpleWindow {
@@ -243,7 +246,13 @@ impl WindowHandler for SimpleWindow {
             configure.new_size, configure.decoration_mode
         );
 
-        let (width, height) = if configure.decoration_mode == DecorationMode::Client {
+        let decoration_mode = if self.hide_decorations {
+            DecorationMode::Server
+        } else {
+            configure.decoration_mode
+        };
+
+        let (width, height) = if decoration_mode == DecorationMode::Client {
             let window_frame = self.window_frame.get_or_insert_with(|| {
                 let mut frame = AdwaitaFrame::new(
                     &self.window,
@@ -447,7 +456,43 @@ impl PointerHandler for SimpleWindow {
                         }
                     } else if pressed {
                         println!("Press {:x} @ {:?}", button, event.position);
-                        self.shift = self.shift.xor(Some(0));
+
+                        // Hide and unhide decorations on right click
+                        if button == 0x111 {
+                            self.hide_decorations = !self.hide_decorations;
+
+                            if let Some(frame) = self.window_frame.as_mut() {
+                                if self.hide_decorations {
+                                    frame.set_hidden(true);
+                                    self.window.xdg_surface().set_window_geometry(
+                                        0,
+                                        0,
+                                        self.width.get() as i32,
+                                        self.height.get() as i32,
+                                    );
+                                } else {
+                                    let (width, height) = (self.width, self.height);
+
+                                    frame.set_hidden(false);
+                                    frame.resize(width, height);
+
+                                    let (x, y) = frame.location();
+                                    let outer_size = frame.add_borders(width.get(), height.get());
+                                    self.window.xdg_surface().set_window_geometry(
+                                        x,
+                                        y,
+                                        outer_size.0 as i32,
+                                        outer_size.1 as i32,
+                                    );
+
+                                    // Update new width and height;
+                                    self.width = width;
+                                    self.height = height;
+                                }
+                            }
+                        } else {
+                            self.shift = self.shift.xor(Some(0));
+                        }
                     }
                 }
                 Axis {
