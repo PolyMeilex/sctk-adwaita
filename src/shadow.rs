@@ -366,7 +366,10 @@ impl CachedPart {
 
     fn draw(&self, dst_pixmap: &mut PixmapMut) {
         let src_data = self.pixmap.data();
-        dst_pixmap.data_mut()[..src_data.len()].copy_from_slice(src_data);
+
+        if let Some(pixmap) = dst_pixmap.data_mut().get_mut(..src_data.len()) {
+            pixmap.copy_from_slice(src_data);
+        }
     }
 }
 

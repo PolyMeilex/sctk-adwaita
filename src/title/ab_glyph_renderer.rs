@@ -176,7 +176,7 @@ fn parse_font(sys_font: &Option<(memmap2::Mmap, FontPreference)>) -> FontRef<'_>
                     if font_pref
                         .style
                         .as_deref()
-                        .map_or(false, |s| s.eq_ignore_ascii_case("bold"))
+                        .is_some_and(|s| s.eq_ignore_ascii_case("bold"))
                     {
                         f.set_variation(b"wght", 700.0);
                     }
