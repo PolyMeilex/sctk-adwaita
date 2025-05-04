@@ -1,5 +1,5 @@
 use crate::{parts::DecorationParts, theme};
-use std::collections::BTreeMap;
+use std::collections::{btree_map, BTreeMap};
 use tiny_skia::{Pixmap, PixmapMut, PixmapRef, Point, PremultipliedColorU8};
 
 // These values were generated from a screenshot of an libadwaita window using a script.
@@ -25,38 +25,47 @@ struct RenderedShadow {
 }
 
 impl RenderedShadow {
-    fn new(scale: u32, active: bool) -> RenderedShadow {
+    fn new(scale: u32, active: bool) -> Option<RenderedShadow> {
         let shadow_size = SHADOW_SIZE * scale;
         let corner_radius = theme::CORNER_RADIUS * scale;
 
-        #[allow(clippy::unwrap_used)]
-        let mut side = Pixmap::new(shadow_size, 1).unwrap();
+        let mut side = Pixmap::new(shadow_size, 1)?;
         for x in 0..side.width() as usize {
-            let alpha = (shadow(x as f32 + 0.5, scale, active) * u8::MAX as f32).round() as u8;
+            let shadow = shadow(x as f32 + 0.5, scale, active);
+            let alpha = (shadow * u8::MAX as f32).round() as u8;
 
-            #[allow(clippy::unwrap_used)]
-            let color = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
-            side.pixels_mut()[x] = color;
+            let Some(color) = PremultipliedColorU8::from_rgba(0, 0, 0, alpha) else {
+                continue;
+            };
+
+            if let Some(pixel) = side.pixels_mut().get_mut(x) {
+                *pixel = color;
+            }
         }
 
         let edges_size = (corner_radius + shadow_size) * 2;
-        #[allow(clippy::unwrap_used)]
-        let mut edges = Pixmap::new(edges_size, edges_size).unwrap();
+        let mut edges = Pixmap::new(edges_size, edges_size)?;
         let edges_middle = Point::from_xy(edges_size as f32 / 2.0, edges_size as f32 / 2.0);
         for y in 0..edges_size as usize {
             let y_pos = y as f32 + 0.5;
             for x in 0..edges_size as usize {
                 let dist = edges_middle.distance(Point::from_xy(x as f32 + 0.5, y_pos))
                     - corner_radius as f32;
-                let alpha = (shadow(dist, scale, active) * u8::MAX as f32).round() as u8;
 
-                #[allow(clippy::unwrap_used)]
-                let color = PremultipliedColorU8::from_rgba(0, 0, 0, alpha).unwrap();
-                edges.pixels_mut()[y * edges_size as usize + x] = color;
+                let shadow = shadow(dist, scale, active);
+                let alpha = (shadow * u8::MAX as f32).round() as u8;
+
+                let Some(color) = PremultipliedColorU8::from_rgba(0, 0, 0, alpha) else {
+                    continue;
+                };
+
+                if let Some(pixel) = edges.pixels_mut().get_mut(y * edges_size as usize + x) {
+                    *pixel = color;
+                }
             }
         }
 
-        RenderedShadow { side, edges }
+        Some(RenderedShadow { side, edges })
     }
 
     fn side_draw(
@@ -150,7 +159,11 @@ impl RenderedShadow {
         let shadow_size = (SHADOW_SIZE * scale) as usize;
         let visible_border_size = (theme::VISIBLE_BORDER_SIZE * scale) as usize;
         let corner_radius = (theme::CORNER_RADIUS * scale) as usize;
-        assert!(corner_radius > visible_border_size);
+
+        debug_assert!(corner_radius > visible_border_size);
+        if corner_radius <= visible_border_size {
+            return;
+        }
 
         let dst_width = dst_pixmap.width() as usize;
         let dst_height = dst_pixmap.height() as usize;
@@ -333,16 +346,15 @@ impl CachedPart {
         scale: u32,
         active: bool,
         part_idx: usize,
-    ) -> CachedPart {
-        #[allow(clippy::unwrap_used)]
-        let mut pixmap = Pixmap::new(dst_pixmap.width(), dst_pixmap.height()).unwrap();
+    ) -> Option<CachedPart> {
+        let mut pixmap = Pixmap::new(dst_pixmap.width(), dst_pixmap.height())?;
         rendered.draw(&mut pixmap.as_mut(), scale, part_idx);
 
-        CachedPart {
+        Some(CachedPart {
             pixmap,
             scale,
             active,
-        }
+        })
     }
 
     fn matches(&self, dst_pixmap: &PixmapRef, dst_scale: u32, dst_active: bool) -> bool {
@@ -367,7 +379,9 @@ pub struct Shadow {
 
 impl Shadow {
     pub fn draw(&mut self, pixmap: &mut PixmapMut, scale: u32, active: bool, part_idx: usize) {
-        let cache = &mut self.part_cache[part_idx];
+        let Some(cache) = self.part_cache.get_mut(part_idx) else {
+            return;
+        };
 
         if let Some(cache_value) = cache {
             if !cache_value.matches(&pixmap.as_ref(), scale, active) {
@@ -376,22 +390,19 @@ impl Shadow {
         }
 
         if cache.is_none() {
-            let rendered = self
-                .rendered
-                .entry((scale, active))
-                .or_insert_with(|| RenderedShadow::new(scale, active));
+            let rendered = match self.rendered.entry((scale, active)) {
+                btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                btree_map::Entry::Vacant(entry) => match RenderedShadow::new(scale, active) {
+                    Some(v) => entry.insert(v),
+                    None => return,
+                },
+            };
 
-            *cache = Some(CachedPart::new(
-                &pixmap.as_ref(),
-                rendered,
-                scale,
-                active,
-                part_idx,
-            ));
+            *cache = CachedPart::new(&pixmap.as_ref(), rendered, scale, active, part_idx);
         }
 
-        // We filled the cache above.
-        #[allow(clippy::unwrap_used)]
-        cache.as_ref().unwrap().draw(pixmap);
+        if let Some(cache) = cache.as_ref() {
+            cache.draw(pixmap);
+        }
     }
 }
