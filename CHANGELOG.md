@@ -2,6 +2,8 @@
 - Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
 - Align with new adwaita blue tint #71
 - Add ability to hide the titlebar #69 
+- Bump sctk to 0.20
+- Bump crossfont to 0.9.0
 
 ## 0.10.1
 - Panic hardening of ab-glyph (#64)

@@ -65,8 +65,7 @@ fn main() {
 
     let window_surface = compositor_state.create_surface(&qh);
 
-    let window =
-        xdg_shell_state.create_window(window_surface, WindowDecorations::ServerDefault, &qh);
+    let window = xdg_shell_state.create_window(window_surface, WindowDecorations::ClientOnly, &qh);
     window.set_title("A wayland window");
     // GitHub does not let projects use the `org.github` domain but the `io.github` domain is fine.
     window.set_app_id("simple-window");

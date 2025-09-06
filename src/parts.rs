@@ -1,3 +1,8 @@
+use std::{
+    iter::Enumerate,
+    slice::{Iter, IterMut},
+};
+
 use smithay_client_toolkit::reexports::client::{
     backend::ObjectId,
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
@@ -135,11 +140,11 @@ impl DecorationParts {
         }
     }
 
-    pub fn parts(&self) -> std::iter::Enumerate<std::slice::Iter<Part>> {
+    pub fn parts(&self) -> Enumerate<Iter<'_, Part>> {
         self.parts.iter().enumerate()
     }
 
-    pub fn parts_mut(&mut self) -> std::iter::Enumerate<std::slice::IterMut<Part>> {
+    pub fn parts_mut(&mut self) -> Enumerate<IterMut<'_, Part>> {
         self.parts.iter_mut().enumerate()
     }
 
