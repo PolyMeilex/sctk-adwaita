@@ -1,4 +1,6 @@
 ## [Unreleased]
+
+## 0.11.0
 - Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
 - Align with new adwaita blue tint #71
 - Add ability to hide the titlebar #69 
