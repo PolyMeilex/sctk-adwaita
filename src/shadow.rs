@@ -155,9 +155,9 @@ impl RenderedShadow {
         }
     }
 
-    fn draw(&self, dst_pixmap: &mut PixmapMut, scale: u32, part_idx: usize) {
+    fn draw(&self, dst_pixmap: &mut PixmapMut, scale: u32, part_idx: usize, hide_border: bool) {
         let shadow_size = (SHADOW_SIZE * scale) as usize;
-        let visible_border_size = (theme::VISIBLE_BORDER_SIZE * scale) as usize;
+        let visible_border_size = (theme::visible_border_size(hide_border) * scale) as usize;
         let corner_radius = (theme::CORNER_RADIUS * scale) as usize;
 
         debug_assert!(corner_radius > visible_border_size);
@@ -337,6 +337,7 @@ struct CachedPart {
     pixmap: Pixmap,
     scale: u32,
     active: bool,
+    hide_border: bool,
 }
 
 impl CachedPart {
@@ -346,22 +347,31 @@ impl CachedPart {
         scale: u32,
         active: bool,
         part_idx: usize,
+        hide_border: bool,
     ) -> Option<CachedPart> {
         let mut pixmap = Pixmap::new(dst_pixmap.width(), dst_pixmap.height())?;
-        rendered.draw(&mut pixmap.as_mut(), scale, part_idx);
+        rendered.draw(&mut pixmap.as_mut(), scale, part_idx, hide_border);
 
         Some(CachedPart {
             pixmap,
             scale,
             active,
+            hide_border,
         })
     }
 
-    fn matches(&self, dst_pixmap: &PixmapRef, dst_scale: u32, dst_active: bool) -> bool {
+    fn matches(
+        &self,
+        dst_pixmap: &PixmapRef,
+        dst_scale: u32,
+        dst_active: bool,
+        hide_border: bool,
+    ) -> bool {
         self.pixmap.width() == dst_pixmap.width()
             && self.pixmap.height() == dst_pixmap.height()
             && self.scale == dst_scale
             && self.active == dst_active
+            && self.hide_border == hide_border
     }
 
     fn draw(&self, dst_pixmap: &mut PixmapMut) {
@@ -381,13 +391,20 @@ pub struct Shadow {
 }
 
 impl Shadow {
-    pub fn draw(&mut self, pixmap: &mut PixmapMut, scale: u32, active: bool, part_idx: usize) {
+    pub fn draw(
+        &mut self,
+        pixmap: &mut PixmapMut,
+        scale: u32,
+        active: bool,
+        part_idx: usize,
+        hide_border: bool,
+    ) {
         let Some(cache) = self.part_cache.get_mut(part_idx) else {
             return;
         };
 
         if let Some(cache_value) = cache {
-            if !cache_value.matches(&pixmap.as_ref(), scale, active) {
+            if !cache_value.matches(&pixmap.as_ref(), scale, active, hide_border) {
                 *cache = None;
             }
         }
@@ -401,7 +418,14 @@ impl Shadow {
                 },
             };
 
-            *cache = CachedPart::new(&pixmap.as_ref(), rendered, scale, active, part_idx);
+            *cache = CachedPart::new(
+                &pixmap.as_ref(),
+                rendered,
+                scale,
+                active,
+                part_idx,
+                hide_border,
+            );
         }
 
         if let Some(cache) = cache.as_ref() {
