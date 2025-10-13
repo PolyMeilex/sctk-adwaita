@@ -129,7 +129,6 @@ where
             &base_surface,
             &subcompositor,
             &queue_handle,
-            frame_config.hide_titlebar,
         ));
 
         let theme = frame_config.theme;
@@ -166,14 +165,9 @@ where
 
         if self.hide_titlebar != config.hide_titlebar {
             self.hide_titlebar = config.hide_titlebar;
-            let mut decorations = DecorationParts::new(
-                &self.base_surface,
-                &self.subcompositor,
-                &self.queue_handle,
-                self.hide_titlebar,
-            );
-            decorations.resize(self.width.get(), self.height.get());
-            self.decorations = Some(decorations);
+            if let Some(decorations) = self.decorations.as_mut() {
+                decorations.resize(self.width.get(), self.height.get(), self.hide_titlebar);
+            }
         }
     }
 
@@ -459,7 +453,6 @@ where
                 &self.base_surface,
                 &self.subcompositor,
                 &self.queue_handle,
-                self.hide_titlebar,
             ));
             self.dirty = true;
             self.should_sync = true;
@@ -480,7 +473,7 @@ where
             return;
         };
 
-        decorations.resize(width.get(), height.get());
+        decorations.resize(width.get(), height.get(), self.hide_titlebar);
         self.buttons
             .arrange(width.get(), get_margin_h_lp(&self.state));
         self.dirty = true;
