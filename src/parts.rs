@@ -372,4 +372,110 @@ mod tests {
         let got = pixmap.encode_png().unwrap();
         png_check("layout", &got);
     }
+
+    #[test]
+    fn layout_no_titlebar() {
+        let mut pixmap = Pixmap::new(400, 400).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        pixmap.fill_rect(
+            tiny_skia::Rect::from_xywh(100.0, 100.0, 200.0, 200.0).unwrap(),
+            &Paint {
+                shader: Shader::SolidColor(Color::BLACK),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+
+        let mut layout = PartLayout::calc(200, 200, true, false);
+
+        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
+            let color = match part_idx {
+                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::HEADER => continue,
+                _ => unreachable!(),
+            };
+
+            pixmap.fill_rect(
+                tiny_skia::Rect::from_xywh(
+                    surface_rect.x as f32 + 100.0,
+                    surface_rect.y as f32 + 100.0,
+                    surface_rect.width as f32,
+                    surface_rect.height as f32,
+                )
+                .unwrap(),
+                &Paint {
+                    shader: Shader::SolidColor(color),
+                    ..Default::default()
+                },
+                Transform::identity(),
+                None,
+            );
+        }
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("layout-no-titlebar", &got);
+    }
+
+    #[test]
+    fn layout_no_border() {
+        let mut pixmap = Pixmap::new(400, 400).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        pixmap.fill_rect(
+            tiny_skia::Rect::from_xywh(100.0, 100.0, 200.0, 200.0).unwrap(),
+            &Paint {
+                shader: Shader::SolidColor(Color::BLACK),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+
+        let hide_border = true;
+
+        let mut layout = PartLayout::calc(200, 200, false, hide_border);
+
+        let visible_border_size = theme::visible_border_size(hide_border);
+
+        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
+            let color = match part_idx {
+                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::HEADER => {
+                    // TODO: Why is this not a part of the layout calc?
+                    surface_rect.width += 2 * visible_border_size;
+                    surface_rect.x -= visible_border_size as i32;
+
+                    Color::from_rgba8(255, 255, 0, 255)
+                }
+                _ => unreachable!(),
+            };
+
+            pixmap.fill_rect(
+                tiny_skia::Rect::from_xywh(
+                    surface_rect.x as f32 + 100.0,
+                    surface_rect.y as f32 + 100.0,
+                    surface_rect.width as f32,
+                    surface_rect.height as f32,
+                )
+                .unwrap(),
+                &Paint {
+                    shader: Shader::SolidColor(color),
+                    ..Default::default()
+                },
+                Transform::identity(),
+                None,
+            );
+        }
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("layout-no-border", &got);
+    }
 }
