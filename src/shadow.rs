@@ -341,25 +341,6 @@ struct CachedPart {
 }
 
 impl CachedPart {
-    fn new(
-        dst_pixmap: &PixmapRef,
-        rendered: &RenderedShadow,
-        scale: u32,
-        active: bool,
-        part_idx: usize,
-        hide_border: bool,
-    ) -> Option<CachedPart> {
-        let mut pixmap = Pixmap::new(dst_pixmap.width(), dst_pixmap.height())?;
-        rendered.draw(&mut pixmap.as_mut(), scale, part_idx, hide_border);
-
-        Some(CachedPart {
-            pixmap,
-            scale,
-            active,
-            hide_border,
-        })
-    }
-
     fn matches(
         &self,
         dst_pixmap: &PixmapRef,
@@ -372,14 +353,6 @@ impl CachedPart {
             && self.scale == dst_scale
             && self.active == dst_active
             && self.hide_border == hide_border
-    }
-
-    fn draw(&self, dst_pixmap: &mut PixmapMut) {
-        let src_data = self.pixmap.data();
-
-        if let Some(pixmap) = dst_pixmap.data_mut().get_mut(..src_data.len()) {
-            pixmap.copy_from_slice(src_data);
-        }
     }
 }
 
@@ -418,18 +391,25 @@ impl Shadow {
                 },
             };
 
-            *cache = CachedPart::new(
-                &pixmap.as_ref(),
-                rendered,
+            let Some(mut pixmap) = Pixmap::new(pixmap.width(), pixmap.height()) else {
+                return;
+            };
+
+            rendered.draw(&mut pixmap.as_mut(), scale, part_idx, hide_border);
+
+            *cache = Some(CachedPart {
+                pixmap,
                 scale,
                 active,
-                part_idx,
                 hide_border,
-            );
+            })
         }
 
         if let Some(cache) = cache.as_ref() {
-            cache.draw(pixmap);
+            let src_data = cache.pixmap.data();
+            if let Some(pixmap) = pixmap.data_mut().get_mut(..src_data.len()) {
+                pixmap.copy_from_slice(src_data);
+            }
         }
     }
 }
@@ -439,8 +419,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use tiny_skia::Color;
-
-    use crate::theme::CORNER_RADIUS;
 
     use super::*;
 
