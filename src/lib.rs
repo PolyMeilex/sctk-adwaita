@@ -396,6 +396,28 @@ where
                 }
             };
 
+            // Debug fill all subsurfaces with solid colors
+            if false {
+                match idx {
+                    DecorationParts::TOP => {
+                        pixmap.fill(Color::from_rgba8(255, 0, 0, 255));
+                    }
+                    DecorationParts::LEFT => {
+                        pixmap.fill(Color::from_rgba8(0, 0, 255, 255));
+                    }
+                    DecorationParts::RIGHT => {
+                        pixmap.fill(Color::from_rgba8(0, 0, 255, 255));
+                    }
+                    DecorationParts::BOTTOM => {
+                        pixmap.fill(Color::from_rgba8(255, 0, 0, 255));
+                    }
+                    DecorationParts::HEADER => {
+                        pixmap.fill(Color::from_rgba8(0, 255, 255, 255));
+                    }
+                    _ => {}
+                };
+            }
+
             if should_sync {
                 part.subsurface.set_sync();
             } else {
