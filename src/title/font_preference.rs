@@ -51,41 +51,48 @@ impl FontPreference {
     }
 }
 
-#[test]
-fn pref_from_multi_name_variant_size() {
-    let pref = FontPreference::from_name_style_size("Noto Serif CJK HK Bold 12").unwrap();
-    assert_eq!(pref.name, "Noto Serif CJK HK");
-    assert_eq!(pref.style, Some("Bold".into()));
-    assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
-}
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
 
-#[test]
-fn pref_from_name_variant_size() {
-    let pref = FontPreference::from_name_style_size("Cantarell Bold 12").unwrap();
-    assert_eq!(pref.name, "Cantarell");
-    assert_eq!(pref.style, Some("Bold".into()));
-    assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
-}
+    use super::*;
 
-#[test]
-fn pref_from_name_size() {
-    let pref = FontPreference::from_name_style_size("Cantarell 12").unwrap();
-    assert_eq!(pref.name, "Cantarell");
-    assert_eq!(pref.style, None);
-    assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
-}
+    #[test]
+    fn pref_from_multi_name_variant_size() {
+        let pref = FontPreference::from_name_style_size("Noto Serif CJK HK Bold 12").unwrap();
+        assert_eq!(pref.name, "Noto Serif CJK HK");
+        assert_eq!(pref.style, Some("Bold".into()));
+        assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
+    }
 
-#[test]
-fn pref_from_name() {
-    let pref = FontPreference::from_name_style_size("Cantarell").unwrap();
-    assert_eq!(pref.name, "Cantarell");
-    assert_eq!(pref.style, None);
-    assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
-}
-#[test]
-fn pref_from_multi_name_style() {
-    let pref = FontPreference::from_name_style_size("Foo Bar Baz Bold").unwrap();
-    assert_eq!(pref.name, "Foo Bar Baz");
-    assert_eq!(pref.style, Some("Bold".into()));
-    assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
+    #[test]
+    fn pref_from_name_variant_size() {
+        let pref = FontPreference::from_name_style_size("Cantarell Bold 12").unwrap();
+        assert_eq!(pref.name, "Cantarell");
+        assert_eq!(pref.style, Some("Bold".into()));
+        assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn pref_from_name_size() {
+        let pref = FontPreference::from_name_style_size("Cantarell 12").unwrap();
+        assert_eq!(pref.name, "Cantarell");
+        assert_eq!(pref.style, None);
+        assert!((pref.pt_size - 12.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn pref_from_name() {
+        let pref = FontPreference::from_name_style_size("Cantarell").unwrap();
+        assert_eq!(pref.name, "Cantarell");
+        assert_eq!(pref.style, None);
+        assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
+    }
+    #[test]
+    fn pref_from_multi_name_style() {
+        let pref = FontPreference::from_name_style_size("Foo Bar Baz Bold").unwrap();
+        assert_eq!(pref.name, "Foo Bar Baz");
+        assert_eq!(pref.style, Some("Bold".into()));
+        assert!((pref.pt_size - 10.0).abs() < f32::EPSILON);
+    }
 }

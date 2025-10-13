@@ -433,3 +433,147 @@ impl Shadow {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use tiny_skia::Color;
+
+    use crate::theme::CORNER_RADIUS;
+
+    use super::*;
+
+    fn expected_file_path(name: &str) -> String {
+        format!("./tests/shadow/{name}.expected.png")
+    }
+    fn got_file_path(name: &str) -> String {
+        format!("./tests/shadow/{name}.got.png")
+    }
+
+    #[track_caller]
+    fn png_check(name: &str, got: &[u8]) {
+        let expected = std::fs::read(expected_file_path(name)).unwrap();
+        std::fs::write(got_file_path(name), got).unwrap();
+        assert_eq!(
+            expected,
+            got,
+            "Mismatch in the file: {}",
+            got_file_path(name)
+        );
+    }
+
+    #[allow(unused)]
+    #[track_caller]
+    fn png_update_expected(name: &str, got: &[u8]) {
+        std::fs::write(expected_file_path(name), got).unwrap();
+    }
+
+    #[test]
+    fn source_texture_side_active() {
+        let shadow = RenderedShadow::new(1, true).unwrap();
+        let got = shadow.side.encode_png().unwrap();
+        png_check("side-single-row-active", &got);
+    }
+
+    #[test]
+    fn source_texture_side_inactive() {
+        let shadow = RenderedShadow::new(1, false).unwrap();
+        let got = shadow.side.encode_png().unwrap();
+        png_check("side-single-row-inactive", &got);
+    }
+
+    #[test]
+    fn source_texture_corner_active() {
+        let shadow = RenderedShadow::new(1, true).unwrap();
+        let got = shadow.edges.encode_png().unwrap();
+        png_check("corner-source-active", &got);
+    }
+
+    #[test]
+    fn source_texture_corner_inactive() {
+        let shadow = RenderedShadow::new(1, false).unwrap();
+        let got = shadow.edges.encode_png().unwrap();
+        png_check("corner-source-inactive", &got);
+    }
+
+    #[test]
+    fn side_left() {
+        let mut pixmap = Pixmap::new(60, 100).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        let shadow = RenderedShadow::new(1, true).unwrap();
+
+        shadow.side_draw(
+            false,
+            false,
+            pixmap.height() as usize,
+            &mut pixmap.as_mut(),
+            0,
+            0,
+        );
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("side-left", &got);
+    }
+
+    #[test]
+    fn side_left_flipped() {
+        let mut pixmap = Pixmap::new(60, 100).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        let shadow = RenderedShadow::new(1, true).unwrap();
+
+        shadow.side_draw(
+            true,
+            false,
+            pixmap.height() as usize,
+            &mut pixmap.as_mut(),
+            0,
+            0,
+        );
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("side-left-flipped", &got);
+    }
+
+    #[test]
+    fn side_left_rotated() {
+        let mut pixmap = Pixmap::new(60, 100).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        let shadow = RenderedShadow::new(1, true).unwrap();
+
+        shadow.side_draw(
+            false,
+            true,
+            pixmap.width() as usize,
+            &mut pixmap.as_mut(),
+            0,
+            0,
+        );
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("side-left-rotated", &got);
+    }
+
+    #[test]
+    fn side_left_flipped_rotated() {
+        let mut pixmap = Pixmap::new(60, 100).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        let shadow = RenderedShadow::new(1, true).unwrap();
+
+        shadow.side_draw(
+            true,
+            true,
+            pixmap.width() as usize,
+            &mut pixmap.as_mut(),
+            0,
+            0,
+        );
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("side-left-flipped-rotated", &got);
+    }
+}
