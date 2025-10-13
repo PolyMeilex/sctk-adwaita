@@ -45,10 +45,7 @@ pub mod theme;
 mod title;
 mod wl_typed;
 
-use crate::theme::{
-    ColorMap, ColorTheme, BORDER_SIZE, CORNER_RADIUS, HEADER_SIZE, RESIZE_HANDLE_CORNER_SIZE,
-    VISIBLE_BORDER_SIZE,
-};
+use crate::theme::{ColorMap, ColorTheme, CORNER_RADIUS, HEADER_SIZE, RESIZE_HANDLE_CORNER_SIZE};
 
 use buttons::Buttons;
 use config::get_button_layout_config;
@@ -104,6 +101,7 @@ pub struct AdwaitaFrame<State> {
 
     /// Draw decorations but without the titlebar
     hide_titlebar: bool,
+    hide_border: bool,
 
     width: NonZeroU32,
     height: NonZeroU32,
@@ -153,6 +151,7 @@ where
             resizable: true,
             shadow: Shadow::default(),
             hide_titlebar: frame_config.hide_titlebar,
+            hide_border: frame_config.hide_border,
             width: NonZeroU32::MIN,
             height: NonZeroU32::MIN,
         })
@@ -163,10 +162,16 @@ where
         self.theme = config.theme;
         self.dirty = true;
 
-        if self.hide_titlebar != config.hide_titlebar {
+        if self.hide_titlebar != config.hide_titlebar || self.hide_border != config.hide_border {
             self.hide_titlebar = config.hide_titlebar;
+            self.hide_border = config.hide_border;
             if let Some(decorations) = self.decorations.as_mut() {
-                decorations.resize(self.width.get(), self.height.get(), self.hide_titlebar);
+                decorations.resize(
+                    self.width.get(),
+                    self.height.get(),
+                    self.hide_titlebar,
+                    self.hide_border,
+                );
             }
         }
     }
@@ -181,8 +186,10 @@ where
         let header_width = decoration.header().surface_rect.width;
         let side_height = decoration.side_height();
 
-        let left_corner_x = BORDER_SIZE + RESIZE_HANDLE_CORNER_SIZE;
-        let right_corner_x = (header_width + BORDER_SIZE).saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
+        let border_size = theme::border_size(self.hide_border);
+
+        let left_corner_x = border_size + RESIZE_HANDLE_CORNER_SIZE;
+        let right_corner_x = (header_width + border_size).saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
         let top_corner_y = RESIZE_HANDLE_CORNER_SIZE;
         let bottom_corner_y = side_height.saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
         match location {
@@ -252,14 +259,16 @@ where
             &self.theme.inactive
         };
 
-        let draw_borders = if self.state.contains(WindowState::MAXIMIZED) {
-            // Don't draw the borders.
-            decorations.hide_borders();
+        let draw_edges = if self.state.contains(WindowState::MAXIMIZED) {
+            // Don't draw the borders and shadows.
+            decorations.hide_edges();
             false
         } else {
             true
         };
         let border_paint = colors.border_paint();
+
+        let visible_border_size = theme::visible_border_size(self.hide_border);
 
         // Draw the borders.
         for (idx, part) in decorations.parts().filter(|(_, part)| !part.hide) {
@@ -271,9 +280,9 @@ where
             // start. To achieve that, we enlargen the width of the header by
             // 2 * `VISIBLE_BORDER_SIZE`, and move `x` by `VISIBLE_BORDER_SIZE`
             // to the left.
-            if idx == DecorationParts::HEADER && draw_borders {
-                rect.width += 2 * VISIBLE_BORDER_SIZE;
-                rect.x -= VISIBLE_BORDER_SIZE as i32;
+            if idx == DecorationParts::HEADER && draw_edges {
+                rect.width += 2 * visible_border_size;
+                rect.x -= visible_border_size as i32;
             }
 
             rect.width *= scale;
@@ -302,6 +311,7 @@ where
                     scale,
                     self.state.contains(WindowState::ACTIVATED),
                     idx,
+                    self.hide_border,
                 );
             }
 
@@ -321,11 +331,12 @@ where
                         &self.theme,
                         &self.buttons,
                         self.mouse.location,
+                        self.hide_border,
                     );
                 }
                 border => {
                     // The visible border is one pt.
-                    let visible_border_size = VISIBLE_BORDER_SIZE * scale;
+                    let visible_border_size = visible_border_size * scale;
 
                     // XXX we do all the match using integral types and then convert to f32 in the
                     // end to ensure that result is finite.
@@ -473,9 +484,14 @@ where
             return;
         };
 
-        decorations.resize(width.get(), height.get(), self.hide_titlebar);
+        decorations.resize(
+            width.get(),
+            height.get(),
+            self.hide_titlebar,
+            self.hide_border,
+        );
         self.buttons
-            .arrange(width.get(), get_margin_h_lp(&self.state));
+            .arrange(width.get(), get_margin_h_lp(&self.state, self.hide_border));
         self.dirty = true;
         self.should_sync = true;
     }
@@ -548,7 +564,10 @@ where
                 &self.state,
                 &self.wm_capabilities,
             ),
-            FrameClick::Alternate => self.mouse.alternate_click(pressed, &self.wm_capabilities),
+            FrameClick::Alternate => {
+                self.mouse
+                    .alternate_click(pressed, &self.wm_capabilities, self.hide_border)
+            }
             _ => None,
         }
     }
@@ -605,6 +624,8 @@ pub struct FrameConfig {
     pub theme: ColorTheme,
     /// Draw decorations but without the titlebar
     pub hide_titlebar: bool,
+    /// Draw decorations but without the window border
+    pub hide_border: bool,
 }
 
 impl FrameConfig {
@@ -613,6 +634,7 @@ impl FrameConfig {
         Self {
             theme,
             hide_titlebar: false,
+            hide_border: false,
         }
     }
 
@@ -642,6 +664,12 @@ impl FrameConfig {
         self.hide_titlebar = hide;
         self
     }
+
+    /// Draw decorations but without the window border
+    pub fn hide_border(mut self, hide: bool) -> Self {
+        self.hide_border = hide;
+        self
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -654,13 +682,14 @@ fn draw_headerbar(
     theme: &ColorTheme,
     buttons: &Buttons,
     mouse: Location,
+    hider_border: bool,
 ) {
     let colors = theme.for_state(state.contains(WindowState::ACTIVATED));
 
     let _ = draw_headerbar_bg(pixmap, scale, colors, state);
 
     // Horizontal margin.
-    let margin_h = get_margin_h_lp(state) * 2.0;
+    let margin_h = get_margin_h_lp(state, hider_border) * 2.0;
 
     let canvas_w = pixmap.width() as f32;
     let canvas_h = pixmap.height() as f32;
@@ -834,10 +863,10 @@ fn rounded_headerbar_shape(x: f32, y: f32, width: f32, height: f32, radius: f32)
 }
 
 // returns horizontal margin, logical points
-fn get_margin_h_lp(state: &WindowState) -> f32 {
+fn get_margin_h_lp(state: &WindowState, hider_border: bool) -> f32 {
     if state.intersects(WindowState::MAXIMIZED | WindowState::TILED) {
-        0.
+        0.0
     } else {
-        VISIBLE_BORDER_SIZE as f32
+        theme::visible_border_size(hider_border) as f32
     }
 }

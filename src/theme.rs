@@ -5,10 +5,20 @@ use tiny_skia::{Paint, Shader};
 pub(crate) const RESIZE_HANDLE_SIZE: u32 = 12;
 // https://gitlab.gnome.org/GNOME/gtk/-/blob/1bf88f1d81043fd99740e2f91e56ade7ede7303b/gtk/gtkwindow.c#L166
 pub(crate) const RESIZE_HANDLE_CORNER_SIZE: u32 = 24;
-pub(crate) const BORDER_SIZE: u32 = crate::shadow::SHADOW_SIZE + VISIBLE_BORDER_SIZE;
 pub(crate) const HEADER_SIZE: u32 = 35;
 pub(crate) const CORNER_RADIUS: u32 = 10;
-pub(crate) const VISIBLE_BORDER_SIZE: u32 = 1;
+
+pub(crate) fn border_size(hide_border: bool) -> u32 {
+    crate::shadow::SHADOW_SIZE + visible_border_size(hide_border)
+}
+
+pub(crate) fn visible_border_size(hide_border: bool) -> u32 {
+    if hide_border {
+        0
+    } else {
+        1
+    }
+}
 
 /// The color theme to use with the decorations frame.
 #[derive(Debug, Clone)]

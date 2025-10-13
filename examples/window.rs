@@ -101,6 +101,7 @@ fn main() {
         set_cursor: false,
         cursor_icon: CursorIcon::Crosshair,
         hide_titlebar: false,
+        hide_border: false,
     };
 
     // We don't draw immediately, the configure will notify us when to first draw.
@@ -139,6 +140,7 @@ struct SimpleWindow {
     cursor_icon: CursorIcon,
 
     hide_titlebar: bool,
+    hide_border: bool,
 }
 
 impl CompositorHandler for SimpleWindow {
@@ -456,7 +458,7 @@ impl PointerHandler for SimpleWindow {
 
                             if let Some(frame) = self.window_frame.as_mut() {
                                 // FrameConfig::auto() is not free, this shouldn't be called here
-                                let config = FrameConfig::auto();
+                                let config = FrameConfig::auto().hide_border(self.hide_border);
 
                                 if self.hide_titlebar {
                                     frame.set_config(config.hide_titlebar(true));
@@ -485,6 +487,14 @@ impl PointerHandler for SimpleWindow {
                                     self.width = width;
                                     self.height = height;
                                 }
+                            }
+                        } else if button == 0x112 {
+                            if let Some(frame) = self.window_frame.as_mut() {
+                                // FrameConfig::auto() is not free, this shouldn't be called here
+                                let config = FrameConfig::auto().hide_titlebar(self.hide_titlebar);
+
+                                self.hide_border = !self.hide_border;
+                                frame.set_config(config.hide_border(self.hide_border));
                             }
                         } else {
                             self.shift = self.shift.xor(Some(0));
@@ -602,6 +612,7 @@ impl SimpleWindow {
                     let g = u32::min((x * 0xFF) / width, ((height - y) * 0xFF) / height);
                     let b = u32::min(((width - x) * 0xFF) / width, (y * 0xFF) / height);
                     let color = (a << 24) + (r << 16) + (g << 8) + b;
+                    // let color: u32 = 0x0;
 
                     let array: &mut [u8; 4] = chunk.try_into().unwrap();
                     *array = color.to_le_bytes();

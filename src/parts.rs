@@ -14,7 +14,7 @@ use smithay_client_toolkit::{
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
-use crate::theme::{BORDER_SIZE, HEADER_SIZE, RESIZE_HANDLE_SIZE};
+use crate::theme::{self, HEADER_SIZE, RESIZE_HANDLE_SIZE};
 use crate::{pointer::Location, wl_typed::WlTyped};
 
 /// The decoration's 'parts'.
@@ -59,7 +59,8 @@ impl DecorationParts {
         self.parts.iter_mut().enumerate()
     }
 
-    pub fn borders_mut(&mut self) -> impl Iterator<Item = &mut Part> {
+    /// Edge is a border + shadow
+    fn edges_mut(&mut self) -> impl Iterator<Item = &mut Part> {
         self.parts_mut()
             .filter(|(idx, _)| *idx != Self::HEADER)
             .map(|(_, p)| p)
@@ -88,8 +89,9 @@ impl DecorationParts {
         }
     }
 
-    pub fn hide_borders(&mut self) {
-        for part in self.borders_mut() {
+    /// Edge is a border + shadow
+    pub fn hide_edges(&mut self) {
+        for part in self.edges_mut() {
             part.hide = true;
             part.surface.attach(None, 0, 0);
             part.surface.commit();
@@ -103,11 +105,11 @@ impl DecorationParts {
         part.surface.commit();
     }
 
-    pub fn resize(&mut self, width: u32, height: u32, hide_titlebar: bool) {
+    pub fn resize(&mut self, width: u32, height: u32, hide_titlebar: bool, hide_border: bool) {
         let header_size = if hide_titlebar { 0 } else { HEADER_SIZE };
         let height_with_header = height + header_size;
 
-        let border_size = BORDER_SIZE;
+        let border_size = theme::border_size(hide_border);
 
         let width_with_border = width + 2 * border_size;
         let width_input_rect = width_with_border - (border_size * 2) + (RESIZE_HANDLE_SIZE * 2);
