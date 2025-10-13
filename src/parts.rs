@@ -106,75 +106,11 @@ impl DecorationParts {
     }
 
     pub fn resize(&mut self, width: u32, height: u32, hide_titlebar: bool, hide_border: bool) {
-        let header_size = if hide_titlebar { 0 } else { HEADER_SIZE };
-        let height_with_header = height + header_size;
-
-        let border_size = theme::border_size(hide_border);
-
-        let width_with_border = width + 2 * border_size;
-        let width_input_rect = width_with_border - (border_size * 2) + (RESIZE_HANDLE_SIZE * 2);
-
-        let header_offset = header_size;
-
-        self.parts[DecorationParts::TOP].surface_rect = Rect {
-            x: -(border_size as i32),
-            y: -(header_offset as i32 + border_size as i32),
-            width: width_with_border,
-            height: border_size,
-        };
-        self.parts[DecorationParts::TOP].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
-            y: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
-            width: width_input_rect,
-            height: RESIZE_HANDLE_SIZE,
-        });
-
-        self.parts[DecorationParts::LEFT].surface_rect = Rect {
-            x: -(border_size as i32),
-            y: -(header_offset as i32),
-            width: border_size,
-            height: height_with_header,
-        };
-        self.parts[DecorationParts::LEFT].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
-            y: 0,
-            width: RESIZE_HANDLE_SIZE,
-            height: height_with_header,
-        });
-
-        self.parts[DecorationParts::RIGHT].surface_rect = Rect {
-            x: width as i32,
-            y: -(header_offset as i32),
-            width: border_size,
-            height: height_with_header,
-        };
-        self.parts[DecorationParts::RIGHT].input_rect = Some(Rect {
-            x: 0,
-            y: 0,
-            width: RESIZE_HANDLE_SIZE,
-            height: height_with_header,
-        });
-
-        self.parts[DecorationParts::BOTTOM].surface_rect = Rect {
-            x: -(border_size as i32),
-            y: height as i32,
-            width: width_with_border,
-            height: border_size,
-        };
-        self.parts[DecorationParts::BOTTOM].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
-            y: 0,
-            width: width_input_rect,
-            height: RESIZE_HANDLE_SIZE,
-        });
-
-        self.parts[DecorationParts::HEADER].surface_rect = Rect {
-            x: 0,
-            y: -(HEADER_SIZE as i32),
-            width,
-            height: HEADER_SIZE,
-        };
-        self.parts[DecorationParts::HEADER].input_rect = None;
+        let layout = PartLayout::calc(width, height, hide_titlebar, hide_border);
+        for (part, layout) in self.parts.iter_mut().zip(layout) {
+            part.surface_rect = layout.surface_rect;
+            part.input_rect = layout.input_rect;
+        }
     }
 
     pub fn side_height(&self) -> u32 {
@@ -199,6 +135,94 @@ impl DecorationParts {
             Self::RIGHT => Location::Right,
             _ => unreachable!(),
         }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+struct PartLayout {
+    /// Positioned relative to the main surface.
+    surface_rect: Rect,
+    /// Positioned relative to the local surface, aka. `surface_rect`.
+    ///
+    /// `None` if it fully covers `surface_rect`.
+    input_rect: Option<Rect>,
+}
+
+impl PartLayout {
+    fn calc(width: u32, height: u32, hide_titlebar: bool, hide_border: bool) -> [Self; 5] {
+        let mut parts = [Self::default(); 5];
+
+        let header_size = if hide_titlebar { 0 } else { HEADER_SIZE };
+        let height_with_header = height + header_size;
+
+        let border_size = theme::border_size(hide_border);
+
+        let width_with_border = width + 2 * border_size;
+        let width_input_rect = width_with_border - (border_size * 2) + (RESIZE_HANDLE_SIZE * 2);
+
+        let header_offset = header_size;
+
+        parts[DecorationParts::TOP].surface_rect = Rect {
+            x: -(border_size as i32),
+            y: -(header_offset as i32 + border_size as i32),
+            width: width_with_border,
+            height: border_size,
+        };
+        parts[DecorationParts::TOP].input_rect = Some(Rect {
+            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            y: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            width: width_input_rect,
+            height: RESIZE_HANDLE_SIZE,
+        });
+
+        parts[DecorationParts::LEFT].surface_rect = Rect {
+            x: -(border_size as i32),
+            y: -(header_offset as i32),
+            width: border_size,
+            height: height_with_header,
+        };
+        parts[DecorationParts::LEFT].input_rect = Some(Rect {
+            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            y: 0,
+            width: RESIZE_HANDLE_SIZE,
+            height: height_with_header,
+        });
+
+        parts[DecorationParts::RIGHT].surface_rect = Rect {
+            x: width as i32,
+            y: -(header_offset as i32),
+            width: border_size,
+            height: height_with_header,
+        };
+        parts[DecorationParts::RIGHT].input_rect = Some(Rect {
+            x: 0,
+            y: 0,
+            width: RESIZE_HANDLE_SIZE,
+            height: height_with_header,
+        });
+
+        parts[DecorationParts::BOTTOM].surface_rect = Rect {
+            x: -(border_size as i32),
+            y: height as i32,
+            width: width_with_border,
+            height: border_size,
+        };
+        parts[DecorationParts::BOTTOM].input_rect = Some(Rect {
+            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            y: 0,
+            width: width_input_rect,
+            height: RESIZE_HANDLE_SIZE,
+        });
+
+        parts[DecorationParts::HEADER].surface_rect = Rect {
+            x: 0,
+            y: -(HEADER_SIZE as i32),
+            width,
+            height: HEADER_SIZE,
+        };
+        parts[DecorationParts::HEADER].input_rect = None;
+
+        parts
     }
 }
 
@@ -257,5 +281,95 @@ impl Drop for Part {
     fn drop(&mut self) {
         self.subsurface.destroy();
         self.surface.destroy();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use tiny_skia::{Color, Paint, Pixmap, Shader, Transform};
+
+    use super::*;
+
+    fn expected_file_path(name: &str) -> String {
+        format!("./tests/subsurface-layout/{name}.expected.png")
+    }
+    fn got_file_path(name: &str) -> String {
+        format!("./tests/subsurface-layout/{name}.got.png")
+    }
+
+    #[track_caller]
+    fn png_check(name: &str, got: &[u8]) {
+        let expected = std::fs::read(expected_file_path(name)).unwrap();
+        std::fs::write(got_file_path(name), got).unwrap();
+        assert_eq!(
+            expected,
+            got,
+            "Mismatch in the file: {}",
+            got_file_path(name)
+        );
+    }
+
+    #[allow(unused)]
+    #[track_caller]
+    fn png_update_expected(name: &str, got: &[u8]) {
+        std::fs::write(expected_file_path(name), got).unwrap();
+    }
+
+    #[test]
+    fn layout() {
+        let mut pixmap = Pixmap::new(400, 400).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        pixmap.fill_rect(
+            tiny_skia::Rect::from_xywh(100.0, 100.0, 200.0, 200.0).unwrap(),
+            &Paint {
+                shader: Shader::SolidColor(Color::BLACK),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+
+        let mut layout = PartLayout::calc(200, 200, false, false);
+
+        let visible_border_size = theme::visible_border_size(false);
+
+        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
+            let color = match part_idx {
+                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                DecorationParts::HEADER => {
+                    // TODO: Why is this not a part of the layout calc?
+                    surface_rect.width += 2 * visible_border_size;
+                    surface_rect.x -= visible_border_size as i32;
+
+                    Color::from_rgba8(255, 255, 0, 255)
+                }
+                _ => unreachable!(),
+            };
+
+            pixmap.fill_rect(
+                tiny_skia::Rect::from_xywh(
+                    surface_rect.x as f32 + 100.0,
+                    surface_rect.y as f32 + 100.0,
+                    surface_rect.width as f32,
+                    surface_rect.height as f32,
+                )
+                .unwrap(),
+                &Paint {
+                    shader: Shader::SolidColor(color),
+                    ..Default::default()
+                },
+                Transform::identity(),
+                None,
+            );
+        }
+
+        let got = pixmap.encode_png().unwrap();
+        png_check("layout", &got);
     }
 }
