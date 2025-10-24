@@ -266,11 +266,9 @@ where
             decorations.hide_edges();
         }
 
-        let colors = if self.state.contains(WindowState::ACTIVATED) {
-            &self.theme.active
-        } else {
-            &self.theme.inactive
-        };
+        let colors = self
+            .theme
+            .for_state(self.state.contains(WindowState::ACTIVATED));
 
         let border_paint = colors.border_paint();
 
