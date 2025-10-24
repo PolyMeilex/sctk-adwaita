@@ -432,11 +432,7 @@ impl PointerHandler for SimpleWindow {
                     serial,
                     time,
                 } => {
-                    let pressed = if matches!(event.kind, Press { .. }) {
-                        true
-                    } else {
-                        false
-                    };
+                    let pressed = matches!(event.kind, Press { .. });
                     if &event.surface != self.window.wl_surface() {
                         let click = match button {
                             0x110 => FrameClick::Normal,
@@ -624,11 +620,11 @@ impl SimpleWindow {
         }
 
         // Draw the decorations frame.
-        self.window_frame.as_mut().map(|frame| {
+        if let Some(frame) = self.window_frame.as_mut() {
             if frame.is_dirty() && !frame.is_hidden() {
                 frame.draw();
             }
-        });
+        }
 
         // Damage the entire window
         self.window.wl_surface().damage_buffer(
