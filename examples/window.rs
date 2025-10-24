@@ -501,13 +501,13 @@ impl PointerHandler for SimpleWindow {
                         }
                     }
                 }
-                Axis {
-                    horizontal,
-                    vertical,
-                    ..
-                } => {
+                Axis { vertical, .. } => {
                     if &event.surface == self.window.wl_surface() {
-                        println!("Scroll H:{horizontal:?}, V:{vertical:?}");
+                        if vertical.absolute < 0.0 {
+                            self.window.set_fullscreen(None);
+                        } else {
+                            self.window.unset_fullscreen();
+                        }
                     }
                 }
             }
