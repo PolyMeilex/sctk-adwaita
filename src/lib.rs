@@ -45,6 +45,7 @@ pub mod theme;
 mod title;
 mod wl_typed;
 
+use crate::parts::LayoutConfig;
 use crate::theme::{ColorMap, ColorTheme, CORNER_RADIUS, HEADER_SIZE, RESIZE_HANDLE_CORNER_SIZE};
 
 use buttons::Buttons;
@@ -165,13 +166,10 @@ where
         if self.hide_titlebar != config.hide_titlebar || self.hide_border != config.hide_border {
             self.hide_titlebar = config.hide_titlebar;
             self.hide_border = config.hide_border;
+
+            let layout_config = self.layout_config();
             if let Some(decorations) = self.decorations.as_mut() {
-                decorations.resize(
-                    self.width.get(),
-                    self.height.get(),
-                    self.hide_titlebar,
-                    self.hide_border,
-                );
+                decorations.relayout(layout_config);
             }
         }
     }
@@ -234,14 +232,25 @@ where
         }
     }
 
+    fn layout_config(&self) -> LayoutConfig {
+        LayoutConfig {
+            width: self.width.get(),
+            height: self.height.get(),
+            hide_titlebar: self.hide_titlebar,
+            hide_border: self.hide_border,
+            hide_edges: self.state.contains(WindowState::MAXIMIZED),
+        }
+    }
+
     fn redraw_inner(&mut self) -> Option<bool> {
+        let layout_config = self.layout_config();
         let decorations = self.decorations.as_mut()?;
 
         // Reset the dirty bit.
         self.dirty = false;
         let should_sync = mem::take(&mut self.should_sync);
 
-        // Don't draw borders if the frame explicitly hidden or fullscreened.
+        // Don't draw decorations if the frame is fullscreened.
         if self.state.contains(WindowState::FULLSCREEN) {
             decorations.hide();
             return Some(true);
@@ -249,8 +258,12 @@ where
             decorations.show();
         }
 
-        if self.hide_titlebar {
+        if layout_config.hide_titlebar {
             decorations.hide_titlebar();
+        }
+        if layout_config.hide_edges {
+            // Don't draw the borders and shadows.
+            decorations.hide_edges();
         }
 
         let colors = if self.state.contains(WindowState::ACTIVATED) {
@@ -259,32 +272,15 @@ where
             &self.theme.inactive
         };
 
-        let draw_edges = if self.state.contains(WindowState::MAXIMIZED) {
-            // Don't draw the borders and shadows.
-            decorations.hide_edges();
-            false
-        } else {
-            true
-        };
         let border_paint = colors.border_paint();
 
-        let visible_border_size = theme::visible_border_size(self.hide_border);
+        decorations.relayout(layout_config);
 
         // Draw the borders.
         for (idx, part) in decorations.parts().filter(|(_, part)| !part.hide) {
             let scale = self.scale_factor;
 
             let mut rect = part.surface_rect;
-            // XXX to perfectly align the visible borders we draw them with
-            // the header, otherwise rounded corners won't look 'smooth' at the
-            // start. To achieve that, we enlargen the width of the header by
-            // 2 * `VISIBLE_BORDER_SIZE`, and move `x` by `VISIBLE_BORDER_SIZE`
-            // to the left.
-            if idx == DecorationParts::HEADER && draw_edges {
-                rect.width += 2 * visible_border_size;
-                rect.x -= visible_border_size as i32;
-            }
-
             rect.width *= scale;
             rect.height *= scale;
 
@@ -335,6 +331,7 @@ where
                     );
                 }
                 border => {
+                    let visible_border_size = theme::visible_border_size(self.hide_border);
                     // The visible border is one pt.
                     let visible_border_size = visible_border_size * scale;
 
@@ -501,17 +498,14 @@ where
         self.width = width;
         self.height = height;
 
+        let layout_config = self.layout_config();
+
         let Some(decorations) = self.decorations.as_mut() else {
             log::error!("trying to resize the hidden frame.");
             return;
         };
 
-        decorations.resize(
-            width.get(),
-            height.get(),
-            self.hide_titlebar,
-            self.hide_border,
-        );
+        decorations.relayout(layout_config);
         self.buttons
             .arrange(width.get(), get_margin_h_lp(&self.state, self.hide_border));
         self.dirty = true;

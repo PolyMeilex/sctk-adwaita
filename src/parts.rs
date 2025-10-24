@@ -21,6 +21,7 @@ use crate::{pointer::Location, wl_typed::WlTyped};
 #[derive(Debug)]
 pub struct DecorationParts {
     parts: [Part; 5],
+    config: LayoutConfig,
 }
 
 impl DecorationParts {
@@ -48,7 +49,10 @@ impl DecorationParts {
             Part::new(base_surface, subcompositor, queue_handle),
         ];
 
-        Self { parts }
+        Self {
+            parts,
+            config: LayoutConfig::default(),
+        }
     }
 
     pub fn parts(&self) -> Enumerate<Iter<'_, Part>> {
@@ -105,8 +109,13 @@ impl DecorationParts {
         part.surface.commit();
     }
 
-    pub fn resize(&mut self, width: u32, height: u32, hide_titlebar: bool, hide_border: bool) {
-        let layout = PartLayout::calc(width, height, hide_titlebar, hide_border);
+    pub fn relayout(&mut self, config: LayoutConfig) {
+        if self.config == config {
+            return;
+        }
+        self.config = config;
+
+        let layout = PartLayout::calc(config);
         for (part, layout) in self.parts.iter_mut().zip(layout) {
             part.surface_rect = layout.surface_rect;
             part.input_rect = layout.input_rect;
@@ -138,6 +147,15 @@ impl DecorationParts {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, Eq, PartialEq)]
+pub struct LayoutConfig {
+    pub width: u32,
+    pub height: u32,
+    pub hide_titlebar: bool,
+    pub hide_border: bool,
+    pub hide_edges: bool,
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 struct PartLayout {
     /// Positioned relative to the main surface.
@@ -149,7 +167,15 @@ struct PartLayout {
 }
 
 impl PartLayout {
-    fn calc(width: u32, height: u32, hide_titlebar: bool, hide_border: bool) -> [Self; 5] {
+    fn calc(config: LayoutConfig) -> [Self; 5] {
+        let LayoutConfig {
+            width,
+            height,
+            hide_titlebar,
+            hide_border,
+            hide_edges,
+        } = config;
+
         let mut parts = [Self::default(); 5];
 
         let header_size = if hide_titlebar { 0 } else { HEADER_SIZE };
@@ -221,6 +247,18 @@ impl PartLayout {
             height: HEADER_SIZE,
         };
         parts[DecorationParts::HEADER].input_rect = None;
+
+        let visible_border_size = theme::visible_border_size(hide_border);
+
+        // XXX to perfectly align the visible borders we draw them with
+        // the header, otherwise rounded corners won't look 'smooth' at the
+        // start. To achieve that, we enlargen the width of the header by
+        // 2 * `VISIBLE_BORDER_SIZE`, and move `x` by `VISIBLE_BORDER_SIZE`
+        // to the left.
+        if !hide_edges {
+            parts[DecorationParts::HEADER].surface_rect.width += 2 * visible_border_size;
+            parts[DecorationParts::HEADER].surface_rect.x -= visible_border_size as i32;
+        }
 
         parts
     }
@@ -332,9 +370,13 @@ mod tests {
             None,
         );
 
-        let mut layout = PartLayout::calc(200, 200, false, false);
-
-        let visible_border_size = theme::visible_border_size(false);
+        let mut layout = PartLayout::calc(LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: false,
+            hide_border: false,
+            hide_edges: false,
+        });
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
@@ -342,13 +384,7 @@ mod tests {
                 DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
                 DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
                 DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::HEADER => {
-                    // TODO: Why is this not a part of the layout calc?
-                    surface_rect.width += 2 * visible_border_size;
-                    surface_rect.x -= visible_border_size as i32;
-
-                    Color::from_rgba8(255, 255, 0, 255)
-                }
+                DecorationParts::HEADER => Color::from_rgba8(255, 255, 0, 255),
                 _ => unreachable!(),
             };
 
@@ -388,7 +424,13 @@ mod tests {
             None,
         );
 
-        let mut layout = PartLayout::calc(200, 200, true, false);
+        let mut layout = PartLayout::calc(LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: true,
+            hide_border: false,
+            hide_edges: false,
+        });
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
@@ -436,11 +478,13 @@ mod tests {
             None,
         );
 
-        let hide_border = true;
-
-        let mut layout = PartLayout::calc(200, 200, false, hide_border);
-
-        let visible_border_size = theme::visible_border_size(hide_border);
+        let mut layout = PartLayout::calc(LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: false,
+            hide_border: true,
+            hide_edges: false,
+        });
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
@@ -448,13 +492,7 @@ mod tests {
                 DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
                 DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
                 DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::HEADER => {
-                    // TODO: Why is this not a part of the layout calc?
-                    surface_rect.width += 2 * visible_border_size;
-                    surface_rect.x -= visible_border_size as i32;
-
-                    Color::from_rgba8(255, 255, 0, 255)
-                }
+                DecorationParts::HEADER => Color::from_rgba8(255, 255, 0, 255),
                 _ => unreachable!(),
             };
 
