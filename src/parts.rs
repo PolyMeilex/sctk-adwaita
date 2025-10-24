@@ -1,8 +1,3 @@
-use std::{
-    iter::Enumerate,
-    slice::{Iter, IterMut},
-};
-
 use smithay_client_toolkit::reexports::client::{
     backend::ObjectId,
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
@@ -17,22 +12,46 @@ use smithay_client_toolkit::{
 use crate::theme::{self, HEADER_SIZE, RESIZE_HANDLE_SIZE};
 use crate::{pointer::Location, wl_typed::WlTyped};
 
+// Order is important. The lower the number, the earlier the part gets drawn.
+// Because the header can overlap other parts, we draw it last.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum PartId {
+    Top = 0,
+    Left = 1,
+    Right = 2,
+    Bottom = 3,
+    Header = 4,
+}
+
+impl PartId {
+    const TOP: usize = Self::Top as usize;
+    const LEFT: usize = Self::Left as usize;
+    const RIGHT: usize = Self::Right as usize;
+    const BOTTOM: usize = Self::Bottom as usize;
+    const HEADER: usize = Self::Header as usize;
+    pub const COUNT: usize = 5;
+
+    fn from_usize(v: usize) -> Self {
+        match v {
+            Self::TOP => PartId::Top,
+            Self::LEFT => PartId::Left,
+            Self::RIGHT => PartId::Right,
+            Self::BOTTOM => PartId::Bottom,
+            Self::HEADER => PartId::Header,
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// The decoration's 'parts'.
 #[derive(Debug)]
 pub struct DecorationParts {
-    parts: [Part; 5],
+    parts: [Part; PartId::COUNT],
     config: LayoutConfig,
 }
 
 impl DecorationParts {
-    // Order is important. The lower the number, the earlier the part gets drawn.
-    // Because the header can overlap other parts, we draw it last.
-    pub const TOP: usize = 0;
-    pub const LEFT: usize = 1;
-    pub const RIGHT: usize = 2;
-    pub const BOTTOM: usize = 3;
-    pub const HEADER: usize = 4;
-
     pub fn new<State>(
         base_surface: &WlTyped<WlSurface, SurfaceData>,
         subcompositor: &SubcompositorState,
@@ -55,27 +74,33 @@ impl DecorationParts {
         }
     }
 
-    pub fn parts(&self) -> Enumerate<Iter<'_, Part>> {
-        self.parts.iter().enumerate()
+    pub fn parts(&self) -> impl Iterator<Item = (PartId, &Part)> {
+        self.parts
+            .iter()
+            .enumerate()
+            .map(|(id, part)| (PartId::from_usize(id), part))
     }
 
-    pub fn parts_mut(&mut self) -> Enumerate<IterMut<'_, Part>> {
-        self.parts.iter_mut().enumerate()
+    fn parts_mut(&mut self) -> impl Iterator<Item = (PartId, &mut Part)> {
+        self.parts
+            .iter_mut()
+            .enumerate()
+            .map(|(id, part)| (PartId::from_usize(id), part))
     }
 
     /// Edge is a border + shadow
     fn edges_mut(&mut self) -> impl Iterator<Item = &mut Part> {
         self.parts_mut()
-            .filter(|(idx, _)| *idx != Self::HEADER)
+            .filter(|(idx, _)| *idx != PartId::Header)
             .map(|(_, p)| p)
     }
 
     pub fn header(&self) -> &Part {
-        &self.parts[Self::HEADER]
+        &self.parts[PartId::HEADER]
     }
 
     pub fn header_mut(&mut self) -> &mut Part {
-        &mut self.parts[Self::HEADER]
+        &mut self.parts[PartId::HEADER]
     }
 
     pub fn hide(&mut self) {
@@ -123,26 +148,24 @@ impl DecorationParts {
     }
 
     pub fn side_height(&self) -> u32 {
-        self.parts[Self::LEFT].surface_rect.height
+        self.parts[PartId::LEFT].surface_rect.height
     }
 
     pub fn find_surface(&self, surface: &ObjectId) -> Location {
-        let pos = match self
-            .parts
-            .iter()
-            .position(|part| &part.surface.id() == surface)
-        {
-            Some(pos) => pos,
-            None => return Location::None,
+        let found = self
+            .parts()
+            .find(|(_id, part)| &part.surface.id() == surface);
+
+        let Some((id, _)) = found else {
+            return Location::None;
         };
 
-        match pos {
-            Self::HEADER => Location::Head,
-            Self::TOP => Location::Top,
-            Self::BOTTOM => Location::Bottom,
-            Self::LEFT => Location::Left,
-            Self::RIGHT => Location::Right,
-            _ => unreachable!(),
+        match id {
+            PartId::Header => Location::Head,
+            PartId::Top => Location::Top,
+            PartId::Bottom => Location::Bottom,
+            PartId::Left => Location::Left,
+            PartId::Right => Location::Right,
         }
     }
 }
@@ -188,65 +211,65 @@ impl PartLayout {
 
         let header_offset = header_size;
 
-        parts[DecorationParts::TOP].surface_rect = Rect {
+        parts[PartId::TOP].surface_rect = Rect {
             x: -(border_size as i32),
             y: -(header_offset as i32 + border_size as i32),
             width: width_with_border,
             height: border_size,
         };
-        parts[DecorationParts::TOP].input_rect = Some(Rect {
+        parts[PartId::TOP].input_rect = Some(Rect {
             x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
             y: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
             width: width_input_rect,
             height: RESIZE_HANDLE_SIZE,
         });
 
-        parts[DecorationParts::LEFT].surface_rect = Rect {
+        parts[PartId::LEFT].surface_rect = Rect {
             x: -(border_size as i32),
             y: -(header_offset as i32),
             width: border_size,
             height: height_with_header,
         };
-        parts[DecorationParts::LEFT].input_rect = Some(Rect {
+        parts[PartId::LEFT].input_rect = Some(Rect {
             x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
             y: 0,
             width: RESIZE_HANDLE_SIZE,
             height: height_with_header,
         });
 
-        parts[DecorationParts::RIGHT].surface_rect = Rect {
+        parts[PartId::RIGHT].surface_rect = Rect {
             x: width as i32,
             y: -(header_offset as i32),
             width: border_size,
             height: height_with_header,
         };
-        parts[DecorationParts::RIGHT].input_rect = Some(Rect {
+        parts[PartId::RIGHT].input_rect = Some(Rect {
             x: 0,
             y: 0,
             width: RESIZE_HANDLE_SIZE,
             height: height_with_header,
         });
 
-        parts[DecorationParts::BOTTOM].surface_rect = Rect {
+        parts[PartId::BOTTOM].surface_rect = Rect {
             x: -(border_size as i32),
             y: height as i32,
             width: width_with_border,
             height: border_size,
         };
-        parts[DecorationParts::BOTTOM].input_rect = Some(Rect {
+        parts[PartId::BOTTOM].input_rect = Some(Rect {
             x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
             y: 0,
             width: width_input_rect,
             height: RESIZE_HANDLE_SIZE,
         });
 
-        parts[DecorationParts::HEADER].surface_rect = Rect {
+        parts[PartId::HEADER].surface_rect = Rect {
             x: 0,
             y: -(HEADER_SIZE as i32),
             width,
             height: HEADER_SIZE,
         };
-        parts[DecorationParts::HEADER].input_rect = None;
+        parts[PartId::HEADER].input_rect = None;
 
         let visible_border_size = theme::visible_border_size(hide_border);
 
@@ -256,8 +279,8 @@ impl PartLayout {
         // 2 * `VISIBLE_BORDER_SIZE`, and move `x` by `VISIBLE_BORDER_SIZE`
         // to the left.
         if !hide_edges {
-            parts[DecorationParts::HEADER].surface_rect.width += 2 * visible_border_size;
-            parts[DecorationParts::HEADER].surface_rect.x -= visible_border_size as i32;
+            parts[PartId::HEADER].surface_rect.width += 2 * visible_border_size;
+            parts[PartId::HEADER].surface_rect.x -= visible_border_size as i32;
         }
 
         parts
@@ -380,11 +403,11 @@ mod tests {
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
-                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::HEADER => Color::from_rgba8(255, 255, 0, 255),
+                PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
+                PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                PartId::HEADER => Color::from_rgba8(255, 255, 0, 255),
                 _ => unreachable!(),
             };
 
@@ -434,11 +457,11 @@ mod tests {
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
-                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::HEADER => continue,
+                PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
+                PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                PartId::HEADER => continue,
                 _ => unreachable!(),
             };
 
@@ -488,11 +511,11 @@ mod tests {
 
         for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
             let color = match part_idx {
-                DecorationParts::TOP => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::LEFT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::RIGHT => Color::from_rgba8(255, 0, 0, 255),
-                DecorationParts::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                DecorationParts::HEADER => Color::from_rgba8(255, 255, 0, 255),
+                PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
+                PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
+                PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                PartId::HEADER => Color::from_rgba8(255, 255, 0, 255),
                 _ => unreachable!(),
             };
 

@@ -45,7 +45,7 @@ pub mod theme;
 mod title;
 mod wl_typed;
 
-use crate::parts::LayoutConfig;
+use crate::parts::{LayoutConfig, PartId};
 use crate::theme::{ColorMap, ColorTheme, CORNER_RADIUS, HEADER_SIZE, RESIZE_HANDLE_CORNER_SIZE};
 
 use buttons::Buttons;
@@ -88,7 +88,7 @@ pub struct AdwaitaFrame<State> {
     /// Scale factor used for the surface.
     scale_factor: u32,
 
-    /// Wether the frame is resizable.
+    /// Whether the frame is resizable.
     resizable: bool,
 
     buttons: Buttons,
@@ -312,7 +312,7 @@ where
             }
 
             match idx {
-                DecorationParts::HEADER => {
+                PartId::Header => {
                     if let Some(title_text) = self.title_text.as_mut() {
                         title_text.update_scale(scale);
                         title_text.update_color(colors.font_color);
@@ -338,7 +338,7 @@ where
                     // XXX we do all the match using integral types and then convert to f32 in the
                     // end to ensure that result is finite.
                     let border_rect = match border {
-                        DecorationParts::LEFT => {
+                        PartId::Left => {
                             let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
                             let y = rect.y.unsigned_abs() * scale;
                             Rect::from_xywh(
@@ -348,7 +348,7 @@ where
                                 (rect.height - y) as f32,
                             )
                         }
-                        DecorationParts::RIGHT => {
+                        PartId::Right => {
                             let y = rect.y.unsigned_abs() * scale;
                             Rect::from_xywh(
                                 0.,
@@ -359,7 +359,7 @@ where
                         }
                         // We draw small visible border only bellow the window surface, no need to
                         // handle `TOP`.
-                        DecorationParts::BOTTOM => {
+                        PartId::Bottom => {
                             let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
                             Rect::from_xywh(
                                 x as f32,
@@ -369,7 +369,7 @@ where
                             )
                         }
                         // Unless titlebar is disabled
-                        DecorationParts::TOP if self.hide_titlebar => {
+                        PartId::Top if self.hide_titlebar => {
                             let x = rect.x.unsigned_abs() * scale;
                             let x = x.saturating_sub(visible_border_size);
 
@@ -383,7 +383,8 @@ where
                                 visible_border_size as f32,
                             )
                         }
-                        _ => None,
+                        PartId::Top => None,
+                        PartId::Header => None,
                     };
 
                     // Fill the visible border, if present.
@@ -396,22 +397,21 @@ where
             // Debug fill all subsurfaces with solid colors
             if false {
                 match idx {
-                    DecorationParts::TOP => {
+                    PartId::Top => {
                         pixmap.fill(Color::from_rgba8(255, 0, 0, 255));
                     }
-                    DecorationParts::LEFT => {
+                    PartId::Left => {
                         pixmap.fill(Color::from_rgba8(0, 0, 255, 255));
                     }
-                    DecorationParts::RIGHT => {
+                    PartId::Right => {
                         pixmap.fill(Color::from_rgba8(0, 0, 255, 255));
                     }
-                    DecorationParts::BOTTOM => {
+                    PartId::Bottom => {
                         pixmap.fill(Color::from_rgba8(255, 0, 0, 255));
                     }
-                    DecorationParts::HEADER => {
+                    PartId::Header => {
                         pixmap.fill(Color::from_rgba8(0, 255, 255, 255));
                     }
-                    _ => {}
                 };
             }
 

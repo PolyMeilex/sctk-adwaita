@@ -1,4 +1,4 @@
-use crate::{parts::DecorationParts, theme};
+use crate::{parts::PartId, theme};
 use std::collections::{btree_map, BTreeMap};
 use tiny_skia::{Pixmap, PixmapMut, PixmapRef, Point, PremultipliedColorU8};
 
@@ -155,7 +155,7 @@ impl RenderedShadow {
         }
     }
 
-    fn draw(&self, dst_pixmap: &mut PixmapMut, scale: u32, part_idx: usize, hide_border: bool) {
+    fn draw(&self, dst_pixmap: &mut PixmapMut, scale: u32, part_idx: PartId, hide_border: bool) {
         let shadow_size = (SHADOW_SIZE * scale) as usize;
         let visible_border_size = (theme::visible_border_size(hide_border) * scale) as usize;
         let corner_radius = (theme::CORNER_RADIUS * scale) as usize;
@@ -169,7 +169,7 @@ impl RenderedShadow {
         let dst_height = dst_pixmap.height() as usize;
         let edges_half = self.edges.width() as usize / 2;
         match part_idx {
-            DecorationParts::TOP => {
+            PartId::Top => {
                 let left_edge_width = edges_half;
                 let right_edge_width = edges_half;
                 let side_width = dst_width
@@ -205,7 +205,7 @@ impl RenderedShadow {
                     dst_height,
                 );
             }
-            DecorationParts::LEFT => {
+            PartId::Left => {
                 let top_edge_height = corner_radius;
                 let bottom_edge_height = corner_radius - visible_border_size;
                 let side_height = dst_height
@@ -234,7 +234,7 @@ impl RenderedShadow {
                     bottom_edge_height,
                 );
             }
-            DecorationParts::RIGHT => {
+            PartId::Right => {
                 let top_edge_height = corner_radius;
                 let bottom_edge_height = corner_radius - visible_border_size;
                 let side_height = dst_height
@@ -270,7 +270,7 @@ impl RenderedShadow {
                     bottom_edge_height,
                 );
             }
-            DecorationParts::BOTTOM => {
+            PartId::Bottom => {
                 let left_edge_width = edges_half;
                 let right_edge_width = edges_half;
                 let side_width = dst_width
@@ -306,7 +306,7 @@ impl RenderedShadow {
                     dst_height,
                 );
             }
-            DecorationParts::HEADER => {
+            PartId::Header => {
                 self.edges_draw(
                     shadow_size as isize,
                     shadow_size as isize,
@@ -327,7 +327,6 @@ impl RenderedShadow {
                     corner_radius,
                 );
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -358,7 +357,7 @@ impl CachedPart {
 
 #[derive(Default, Debug)]
 pub struct Shadow {
-    part_cache: [Option<CachedPart>; 5],
+    part_cache: [Option<CachedPart>; PartId::COUNT],
     // (scale, active) -> RenderedShadow
     rendered: BTreeMap<(u32, bool), RenderedShadow>,
 }
@@ -369,10 +368,10 @@ impl Shadow {
         pixmap: &mut PixmapMut,
         scale: u32,
         active: bool,
-        part_idx: usize,
+        part_idx: PartId,
         hide_border: bool,
     ) {
-        let Some(cache) = self.part_cache.get_mut(part_idx) else {
+        let Some(cache) = self.part_cache.get_mut(part_idx as usize) else {
             return;
         };
 
