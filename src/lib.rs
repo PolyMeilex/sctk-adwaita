@@ -270,9 +270,12 @@ where
             .theme
             .for_state(self.state.contains(WindowState::ACTIVATED));
 
-        let border_paint = colors.border_paint();
-
         decorations.relayout(layout_config);
+
+        if let Some(title_text) = self.title_text.as_mut() {
+            title_text.update_scale(self.scale_factor);
+            title_text.update_color(colors.font_color);
+        }
 
         // Draw the borders.
         for (idx, part) in decorations.parts().filter(|(_, part)| !part.hide) {
@@ -299,98 +302,21 @@ where
             // do invisible borders to enlarge the input zone.
             pixmap.fill(Color::TRANSPARENT);
 
-            if !self.state.intersects(WindowState::TILED) {
-                self.shadow.draw(
-                    &mut pixmap,
-                    scale,
-                    self.state.contains(WindowState::ACTIVATED),
-                    idx,
-                    self.hide_border,
-                );
-            }
-
-            match idx {
-                PartId::Header => {
-                    if let Some(title_text) = self.title_text.as_mut() {
-                        title_text.update_scale(scale);
-                        title_text.update_color(colors.font_color);
-                    }
-
-                    draw_headerbar(
-                        &mut pixmap,
-                        self.title_text.as_ref().map(|t| t.pixmap()).unwrap_or(None),
-                        scale as f32,
-                        self.resizable,
-                        &self.state,
-                        &self.theme,
-                        &self.buttons,
-                        self.mouse.location,
-                        self.hide_border,
-                    );
-                }
-                border => {
-                    let visible_border_size = theme::visible_border_size(self.hide_border);
-                    // The visible border is one pt.
-                    let visible_border_size = visible_border_size * scale;
-
-                    // XXX we do all the match using integral types and then convert to f32 in the
-                    // end to ensure that result is finite.
-                    let border_rect = match border {
-                        PartId::Left => {
-                            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
-                            let y = rect.y.unsigned_abs() * scale;
-                            Rect::from_xywh(
-                                x as f32,
-                                y as f32,
-                                visible_border_size as f32,
-                                (rect.height - y) as f32,
-                            )
-                        }
-                        PartId::Right => {
-                            let y = rect.y.unsigned_abs() * scale;
-                            Rect::from_xywh(
-                                0.,
-                                y as f32,
-                                visible_border_size as f32,
-                                (rect.height - y) as f32,
-                            )
-                        }
-                        // We draw small visible border only bellow the window surface, no need to
-                        // handle `TOP`.
-                        PartId::Bottom => {
-                            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
-                            Rect::from_xywh(
-                                x as f32,
-                                0.,
-                                (rect.width - 2 * x) as f32,
-                                visible_border_size as f32,
-                            )
-                        }
-                        // Unless titlebar is disabled
-                        PartId::Top if self.hide_titlebar => {
-                            let x = rect.x.unsigned_abs() * scale;
-                            let x = x.saturating_sub(visible_border_size);
-
-                            let y = rect.y.unsigned_abs() * scale;
-                            let y = y.saturating_sub(visible_border_size);
-
-                            Rect::from_xywh(
-                                x as f32,
-                                y as f32,
-                                (rect.width - 2 * x) as f32,
-                                visible_border_size as f32,
-                            )
-                        }
-                        PartId::Top => None,
-                        PartId::Header => None,
-                    };
-
-                    // Fill the visible border, if present.
-                    if let Some(border_rect) = border_rect {
-                        pixmap.fill_rect(border_rect, &border_paint, Transform::identity(), None);
-                    }
-                }
-            };
+            draw_part(
+                idx,
+                rect,
+                &mut pixmap,
+                self.title_text.as_ref().map(|t| t.pixmap()).unwrap_or(None),
+                scale,
+                self.resizable,
+                &self.state,
+                colors,
+                &self.buttons,
+                self.mouse.location,
+                self.hide_border,
+                self.hide_titlebar,
+                &mut self.shadow,
+            );
 
             // Debug fill all subsurfaces with solid colors
             if false {
@@ -687,19 +613,118 @@ impl FrameConfig {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn draw_part(
+    part_id: PartId,
+    rect: parts::Rect,
+    pixmap: &mut PixmapMut,
+    text_pixmap: Option<&Pixmap>,
+    scale: u32,
+    resizable: bool,
+    state: &WindowState,
+    colors: &ColorMap,
+    buttons: &Buttons,
+    mouse: Location,
+    hide_border: bool,
+    hide_titlebar: bool,
+    shadow: &mut Shadow,
+) {
+    if !state.intersects(WindowState::TILED) {
+        shadow.draw(
+            pixmap,
+            scale,
+            state.contains(WindowState::ACTIVATED),
+            part_id,
+            hide_border,
+        );
+    }
+
+    let border_paint = colors.border_paint();
+
+    let visible_border_size = theme::visible_border_size(hide_border);
+    let visible_border_size = visible_border_size * scale;
+
+    // XXX we do all the math using integral types and then convert to f32 in the
+    // end to ensure that result is finite.
+    let border_rect = match part_id {
+        PartId::Header => {
+            return draw_headerbar(
+                pixmap,
+                text_pixmap,
+                scale as f32,
+                resizable,
+                state,
+                colors,
+                buttons,
+                mouse,
+                hide_border,
+            );
+        }
+        PartId::Left => {
+            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
+            let y = rect.y.unsigned_abs() * scale;
+            Rect::from_xywh(
+                x as f32,
+                y as f32,
+                visible_border_size as f32,
+                (rect.height - y) as f32,
+            )
+        }
+        PartId::Right => {
+            let y = rect.y.unsigned_abs() * scale;
+            Rect::from_xywh(
+                0.,
+                y as f32,
+                visible_border_size as f32,
+                (rect.height - y) as f32,
+            )
+        }
+        // We draw small visible border only bellow the window surface, no need to
+        // handle `TOP`.
+        PartId::Bottom => {
+            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
+            Rect::from_xywh(
+                x as f32,
+                0.,
+                (rect.width - 2 * x) as f32,
+                visible_border_size as f32,
+            )
+        }
+        // Unless titlebar is disabled
+        PartId::Top if hide_titlebar => {
+            let x = rect.x.unsigned_abs() * scale;
+            let x = x.saturating_sub(visible_border_size);
+
+            let y = rect.y.unsigned_abs() * scale;
+            let y = y.saturating_sub(visible_border_size);
+
+            Rect::from_xywh(
+                x as f32,
+                y as f32,
+                (rect.width - 2 * x) as f32,
+                visible_border_size as f32,
+            )
+        }
+        PartId::Top => None,
+    };
+
+    // Fill the visible border, if present.
+    if let Some(border_rect) = border_rect {
+        pixmap.fill_rect(border_rect, &border_paint, Transform::identity(), None);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn draw_headerbar(
     pixmap: &mut PixmapMut,
     text_pixmap: Option<&Pixmap>,
     scale: f32,
     resizable: bool,
     state: &WindowState,
-    theme: &ColorTheme,
+    colors: &ColorMap,
     buttons: &Buttons,
     mouse: Location,
     hider_border: bool,
 ) {
-    let colors = theme.for_state(state.contains(WindowState::ACTIVATED));
-
     let _ = draw_headerbar_bg(pixmap, scale, colors, state);
 
     // Horizontal margin.
