@@ -956,9 +956,20 @@ mod tests {
     }
 
     fn draw_test_part(layout_config: LayoutConfig, part_id: PartId) -> Pixmap {
+        draw_test_part_with_scale(layout_config, part_id, 1)
+    }
+
+    fn draw_test_part_with_scale(
+        layout_config: LayoutConfig,
+        part_id: PartId,
+        scale: u32,
+    ) -> Pixmap {
         let layout = PartLayout::calc(layout_config);
 
-        let rect = layout[part_id as usize].surface_rect;
+        let mut rect = layout[part_id as usize].surface_rect;
+        // TODO: Scaling should't be done in the test
+        rect.width *= scale;
+        rect.height *= scale;
 
         let mut pixmap = Pixmap::new(rect.width, rect.height).unwrap();
 
@@ -973,7 +984,7 @@ mod tests {
             rect,
             &mut pixmap.as_mut(),
             None,
-            1,
+            scale,
             true,
             &WindowState::ACTIVATED,
             colors,
@@ -1028,13 +1039,17 @@ mod tests {
     }
 
     fn draw_combined(layout_config: LayoutConfig) -> Pixmap {
+        draw_combined_with_scale(layout_config, 1)
+    }
+
+    fn draw_combined_with_scale(layout_config: LayoutConfig, scale: u32) -> Pixmap {
         let layout = PartLayout::calc(layout_config);
 
-        let mut pixmap = Pixmap::new(400, 400).unwrap();
+        let mut pixmap = Pixmap::new(400 * scale, 400 * scale).unwrap();
         pixmap.fill(Color::WHITE);
 
-        let root_x = 100;
-        let root_y = 100;
+        let root_x = 100 * scale as i32;
+        let root_y = 100 * scale as i32;
 
         pixmap.fill_rect(
             tiny_skia::Rect::from_xywh(root_x as f32, root_y as f32, 200.0, 200.0).unwrap(),
@@ -1047,8 +1062,12 @@ mod tests {
         );
 
         let mut draw_pixmap = |part_id: PartId| {
-            let part = draw_test_part(layout_config, part_id);
-            let rect = layout[part_id as usize].surface_rect;
+            let part = draw_test_part_with_scale(layout_config, part_id, scale);
+            let mut rect = layout[part_id as usize].surface_rect;
+            rect.width *= scale;
+            rect.height *= scale;
+            rect.x *= scale as i32;
+            rect.y *= scale as i32;
             pixmap.draw_pixmap(
                 root_x + rect.x,
                 root_y + rect.y,
@@ -1099,5 +1118,14 @@ mod tests {
         layout_config.hide_border = true;
         let got = draw_combined(layout_config).encode_png().unwrap();
         png_check("combined-parts-no-titlebar-and-border", &got);
+    }
+
+    #[test]
+    fn combined_parts_scale_2() {
+        let layout_config = test_layout_config();
+        let got = draw_combined_with_scale(layout_config, 2)
+            .encode_png()
+            .unwrap();
+        png_check("combined-parts-scale-2", &got);
     }
 }
