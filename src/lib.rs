@@ -184,10 +184,10 @@ where
         let header_width = decoration.header().surface_rect.width;
         let side_height = decoration.side_height();
 
-        let border_size = theme::border_size(self.hide_border);
+        let edge_size = theme::edge_size(self.hide_border);
 
-        let left_corner_x = border_size + RESIZE_HANDLE_CORNER_SIZE;
-        let right_corner_x = (header_width + border_size).saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
+        let left_corner_x = edge_size + RESIZE_HANDLE_CORNER_SIZE;
+        let right_corner_x = (header_width + edge_size).saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
         let top_corner_y = RESIZE_HANDLE_CORNER_SIZE;
         let bottom_corner_y = side_height.saturating_sub(RESIZE_HANDLE_CORNER_SIZE);
         match location {
@@ -640,8 +640,8 @@ fn draw_part(
 
     let border_paint = colors.border_paint();
 
-    let visible_border_size = theme::visible_border_size(hide_border);
-    let visible_border_size = visible_border_size * scale;
+    let border_size = theme::border_size(hide_border);
+    let border_size = border_size * scale;
 
     // XXX we do all the math using integral types and then convert to f32 in the
     // end to ensure that result is finite.
@@ -660,48 +660,43 @@ fn draw_part(
             );
         }
         PartId::Left => {
-            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
+            let x = (rect.x.unsigned_abs() * scale) - border_size;
             let y = rect.y.unsigned_abs() * scale;
             Rect::from_xywh(
                 x as f32,
                 y as f32,
-                visible_border_size as f32,
+                border_size as f32,
                 (rect.height - y) as f32,
             )
         }
         PartId::Right => {
             let y = rect.y.unsigned_abs() * scale;
-            Rect::from_xywh(
-                0.,
-                y as f32,
-                visible_border_size as f32,
-                (rect.height - y) as f32,
-            )
+            Rect::from_xywh(0., y as f32, border_size as f32, (rect.height - y) as f32)
         }
         // We draw small visible border only bellow the window surface, no need to
         // handle `TOP`.
         PartId::Bottom => {
-            let x = (rect.x.unsigned_abs() * scale) - visible_border_size;
+            let x = (rect.x.unsigned_abs() * scale) - border_size;
             Rect::from_xywh(
                 x as f32,
                 0.,
                 (rect.width - 2 * x) as f32,
-                visible_border_size as f32,
+                border_size as f32,
             )
         }
         // Unless titlebar is disabled
         PartId::Top if hide_titlebar => {
             let x = rect.x.unsigned_abs() * scale;
-            let x = x.saturating_sub(visible_border_size);
+            let x = x.saturating_sub(border_size);
 
             let y = rect.y.unsigned_abs() * scale;
-            let y = y.saturating_sub(visible_border_size);
+            let y = y.saturating_sub(border_size);
 
             Rect::from_xywh(
                 x as f32,
                 y as f32,
                 (rect.width - 2 * x) as f32,
-                visible_border_size as f32,
+                border_size as f32,
             )
         }
         PartId::Top => None,
@@ -906,7 +901,7 @@ fn get_margin_h_lp(state: &WindowState, hider_border: bool) -> f32 {
     if state.intersects(WindowState::MAXIMIZED | WindowState::TILED) {
         0.0
     } else {
-        theme::visible_border_size(hider_border) as f32
+        theme::border_size(hider_border) as f32
     }
 }
 

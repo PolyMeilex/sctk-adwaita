@@ -157,11 +157,11 @@ impl RenderedShadow {
 
     fn draw(&self, dst_pixmap: &mut PixmapMut, scale: u32, part_idx: PartId, hide_border: bool) {
         let shadow_size = (SHADOW_SIZE * scale) as usize;
-        let visible_border_size = (theme::visible_border_size(hide_border) * scale) as usize;
+        let border_size = (theme::border_size(hide_border) * scale) as usize;
         let corner_radius = (theme::CORNER_RADIUS * scale) as usize;
 
-        debug_assert!(corner_radius > visible_border_size);
-        if corner_radius <= visible_border_size {
+        debug_assert!(corner_radius > border_size);
+        if corner_radius <= border_size {
             return;
         }
 
@@ -178,7 +178,7 @@ impl RenderedShadow {
 
                 self.edges_draw(
                     0,
-                    -(visible_border_size as isize),
+                    -(border_size as isize),
                     dst_pixmap,
                     0,
                     0,
@@ -192,12 +192,12 @@ impl RenderedShadow {
                     side_width,
                     dst_pixmap,
                     left_edge_width,
-                    visible_border_size,
+                    border_size,
                 );
 
                 self.edges_draw(
                     edges_half as isize,
-                    -(visible_border_size as isize),
+                    -(border_size as isize),
                     dst_pixmap,
                     left_edge_width + side_width,
                     0,
@@ -207,7 +207,7 @@ impl RenderedShadow {
             }
             PartId::Left => {
                 let top_edge_height = corner_radius;
-                let bottom_edge_height = corner_radius - visible_border_size;
+                let bottom_edge_height = corner_radius - border_size;
                 let side_height = dst_height
                     .saturating_sub(top_edge_height)
                     .saturating_sub(bottom_edge_height);
@@ -218,7 +218,7 @@ impl RenderedShadow {
                     dst_pixmap,
                     0,
                     0,
-                    dst_width.saturating_sub(visible_border_size),
+                    dst_width.saturating_sub(border_size),
                     top_edge_height,
                 );
 
@@ -230,13 +230,13 @@ impl RenderedShadow {
                     dst_pixmap,
                     0,
                     top_edge_height + side_height,
-                    dst_width.saturating_sub(visible_border_size),
+                    dst_width.saturating_sub(border_size),
                     bottom_edge_height,
                 );
             }
             PartId::Right => {
                 let top_edge_height = corner_radius;
-                let bottom_edge_height = corner_radius - visible_border_size;
+                let bottom_edge_height = corner_radius - border_size;
                 let side_height = dst_height
                     .saturating_sub(top_edge_height)
                     .saturating_sub(bottom_edge_height);
@@ -245,9 +245,9 @@ impl RenderedShadow {
                     edges_half as isize + corner_radius as isize,
                     shadow_size as isize,
                     dst_pixmap,
-                    visible_border_size,
+                    border_size,
                     0,
-                    dst_width.saturating_sub(visible_border_size),
+                    dst_width.saturating_sub(border_size),
                     top_edge_height,
                 );
 
@@ -256,7 +256,7 @@ impl RenderedShadow {
                     false,
                     side_height,
                     dst_pixmap,
-                    visible_border_size,
+                    border_size,
                     top_edge_height,
                 );
 
@@ -264,9 +264,9 @@ impl RenderedShadow {
                     edges_half as isize + corner_radius as isize,
                     edges_half as isize,
                     dst_pixmap,
-                    visible_border_size,
+                    border_size,
                     top_edge_height + side_height,
-                    dst_width.saturating_sub(visible_border_size),
+                    dst_width.saturating_sub(border_size),
                     bottom_edge_height,
                 );
             }
@@ -279,7 +279,7 @@ impl RenderedShadow {
 
                 self.edges_draw(
                     0,
-                    edges_half as isize + (corner_radius - visible_border_size) as isize,
+                    edges_half as isize + (corner_radius - border_size) as isize,
                     dst_pixmap,
                     0,
                     0,
@@ -293,12 +293,12 @@ impl RenderedShadow {
                     side_width,
                     dst_pixmap,
                     left_edge_width,
-                    visible_border_size,
+                    border_size,
                 );
 
                 self.edges_draw(
                     edges_half as isize,
-                    edges_half as isize + (corner_radius - visible_border_size) as isize,
+                    edges_half as isize + (corner_radius - border_size) as isize,
                     dst_pixmap,
                     left_edge_width + side_width,
                     0,

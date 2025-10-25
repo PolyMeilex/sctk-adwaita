@@ -9,7 +9,7 @@ use smithay_client_toolkit::{
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
-use crate::theme::{self, HEADER_SIZE, RESIZE_HANDLE_SIZE};
+use crate::theme::{self, RESIZE_HANDLE_SIZE};
 use crate::{pointer::Location, wl_typed::WlTyped};
 
 // Order is important. The lower the number, the earlier the part gets drawn.
@@ -201,37 +201,35 @@ impl PartLayout {
 
         let mut parts = [Self::default(); 5];
 
-        let header_size = if hide_titlebar { 0 } else { HEADER_SIZE };
-        let height_with_header = height + header_size;
+        let header_height = theme::header_height(hide_titlebar);
+        let height_with_header = height + header_height;
 
-        let border_size = theme::border_size(hide_border);
+        let edge_size = theme::edge_size(hide_border);
 
-        let width_with_border = width + 2 * border_size;
-        let width_input_rect = width_with_border - (border_size * 2) + (RESIZE_HANDLE_SIZE * 2);
-
-        let header_offset = header_size;
+        let width_with_edge = width + 2 * edge_size;
+        let width_input_rect = width_with_edge - (edge_size * 2) + (RESIZE_HANDLE_SIZE * 2);
 
         parts[PartId::TOP].surface_rect = Rect {
-            x: -(border_size as i32),
-            y: -(header_offset as i32 + border_size as i32),
-            width: width_with_border,
-            height: border_size,
+            x: -(edge_size as i32),
+            y: -(header_height as i32 + edge_size as i32),
+            width: width_with_edge,
+            height: edge_size,
         };
         parts[PartId::TOP].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
-            y: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            x: edge_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            y: edge_size as i32 - RESIZE_HANDLE_SIZE as i32,
             width: width_input_rect,
             height: RESIZE_HANDLE_SIZE,
         });
 
         parts[PartId::LEFT].surface_rect = Rect {
-            x: -(border_size as i32),
-            y: -(header_offset as i32),
-            width: border_size,
+            x: -(edge_size as i32),
+            y: -(header_height as i32),
+            width: edge_size,
             height: height_with_header,
         };
         parts[PartId::LEFT].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            x: edge_size as i32 - RESIZE_HANDLE_SIZE as i32,
             y: 0,
             width: RESIZE_HANDLE_SIZE,
             height: height_with_header,
@@ -239,8 +237,8 @@ impl PartLayout {
 
         parts[PartId::RIGHT].surface_rect = Rect {
             x: width as i32,
-            y: -(header_offset as i32),
-            width: border_size,
+            y: -(header_height as i32),
+            width: edge_size,
             height: height_with_header,
         };
         parts[PartId::RIGHT].input_rect = Some(Rect {
@@ -251,13 +249,13 @@ impl PartLayout {
         });
 
         parts[PartId::BOTTOM].surface_rect = Rect {
-            x: -(border_size as i32),
+            x: -(edge_size as i32),
             y: height as i32,
-            width: width_with_border,
-            height: border_size,
+            width: width_with_edge,
+            height: edge_size,
         };
         parts[PartId::BOTTOM].input_rect = Some(Rect {
-            x: border_size as i32 - RESIZE_HANDLE_SIZE as i32,
+            x: edge_size as i32 - RESIZE_HANDLE_SIZE as i32,
             y: 0,
             width: width_input_rect,
             height: RESIZE_HANDLE_SIZE,
@@ -265,13 +263,13 @@ impl PartLayout {
 
         parts[PartId::HEADER].surface_rect = Rect {
             x: 0,
-            y: -(HEADER_SIZE as i32),
+            y: -(header_height as i32),
             width,
-            height: HEADER_SIZE,
+            height: header_height,
         };
         parts[PartId::HEADER].input_rect = None;
 
-        let visible_border_size = theme::visible_border_size(hide_border);
+        let border_size = theme::border_size(hide_border);
 
         // XXX to perfectly align the visible borders we draw them with
         // the header, otherwise rounded corners won't look 'smooth' at the
@@ -279,8 +277,8 @@ impl PartLayout {
         // 2 * `VISIBLE_BORDER_SIZE`, and move `x` by `VISIBLE_BORDER_SIZE`
         // to the left.
         if !hide_edges {
-            parts[PartId::HEADER].surface_rect.width += 2 * visible_border_size;
-            parts[PartId::HEADER].surface_rect.x -= visible_border_size as i32;
+            parts[PartId::HEADER].surface_rect.width += 2 * border_size;
+            parts[PartId::HEADER].surface_rect.x -= border_size as i32;
         }
 
         parts

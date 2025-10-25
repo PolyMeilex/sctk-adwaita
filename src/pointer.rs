@@ -85,7 +85,7 @@ impl MouseState {
         // Invalidate the normal click.
         self.last_normal_click = None;
 
-        let border_size = theme::border_size(hide_border);
+        let edge_size = theme::edge_size(hide_border);
 
         match self.location {
             Location::Head | Location::Button(_)
@@ -94,7 +94,7 @@ impl MouseState {
                 Some(FrameAction::ShowMenu(
                     // XXX this could be one 1pt off when the frame is not maximized, but it's not
                     // like it really matters in the end.
-                    self.position.0 as i32 - border_size as i32,
+                    self.position.0 as i32 - edge_size as i32,
                     // We must offset it by header size for precise position.
                     self.position.1 as i32 - HEADER_SIZE as i32,
                 ))

@@ -8,11 +8,21 @@ pub(crate) const RESIZE_HANDLE_CORNER_SIZE: u32 = 24;
 pub(crate) const HEADER_SIZE: u32 = 35;
 pub(crate) const CORNER_RADIUS: u32 = 10;
 
-pub(crate) fn border_size(hide_border: bool) -> u32 {
-    crate::shadow::SHADOW_SIZE + visible_border_size(hide_border)
+pub(crate) fn header_height(hide_header: bool) -> u32 {
+    if hide_header {
+        0
+    } else {
+        HEADER_SIZE
+    }
 }
 
-pub(crate) fn visible_border_size(hide_border: bool) -> u32 {
+/// Edge is a border + shadows
+pub(crate) fn edge_size(hide_border: bool) -> u32 {
+    crate::shadow::SHADOW_SIZE + border_size(hide_border)
+}
+
+/// Just border without shadows
+pub(crate) fn border_size(hide_border: bool) -> u32 {
     if hide_border {
         0
     } else {
