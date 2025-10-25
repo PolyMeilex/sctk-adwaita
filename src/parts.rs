@@ -378,8 +378,7 @@ mod tests {
         std::fs::write(expected_file_path(name), got).unwrap();
     }
 
-    #[test]
-    fn layout() {
+    fn draw_layout(layout_config: LayoutConfig) -> Pixmap {
         let mut pixmap = Pixmap::new(400, 400).unwrap();
         pixmap.fill(Color::WHITE);
 
@@ -393,20 +392,15 @@ mod tests {
             None,
         );
 
-        let mut layout = PartLayout::calc(LayoutConfig {
-            width: 200,
-            height: 200,
-            hide_titlebar: false,
-            hide_border: false,
-            hide_edges: false,
-        });
+        let layout = PartLayout::calc(layout_config);
 
-        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
+        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter().enumerate() {
             let color = match part_idx {
                 PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
                 PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
                 PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
                 PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
+                PartId::HEADER if layout_config.hide_titlebar => continue,
                 PartId::HEADER => Color::from_rgba8(255, 255, 0, 255),
                 _ => unreachable!(),
             };
@@ -428,115 +422,58 @@ mod tests {
             );
         }
 
+        pixmap
+    }
+
+    #[test]
+    fn layout() {
+        let pixmap = draw_layout(LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: false,
+            hide_border: false,
+            hide_edges: false,
+        });
         let got = pixmap.encode_png().unwrap();
         png_check("layout", &got);
     }
 
     #[test]
     fn layout_no_titlebar() {
-        let mut pixmap = Pixmap::new(400, 400).unwrap();
-        pixmap.fill(Color::WHITE);
-
-        pixmap.fill_rect(
-            tiny_skia::Rect::from_xywh(100.0, 100.0, 200.0, 200.0).unwrap(),
-            &Paint {
-                shader: Shader::SolidColor(Color::BLACK),
-                ..Default::default()
-            },
-            Transform::identity(),
-            None,
-        );
-
-        let mut layout = PartLayout::calc(LayoutConfig {
+        let pixmap = draw_layout(LayoutConfig {
             width: 200,
             height: 200,
             hide_titlebar: true,
             hide_border: false,
             hide_edges: false,
         });
-
-        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
-            let color = match part_idx {
-                PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
-                PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
-                PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
-                PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                PartId::HEADER => continue,
-                _ => unreachable!(),
-            };
-
-            pixmap.fill_rect(
-                tiny_skia::Rect::from_xywh(
-                    surface_rect.x as f32 + 100.0,
-                    surface_rect.y as f32 + 100.0,
-                    surface_rect.width as f32,
-                    surface_rect.height as f32,
-                )
-                .unwrap(),
-                &Paint {
-                    shader: Shader::SolidColor(color),
-                    ..Default::default()
-                },
-                Transform::identity(),
-                None,
-            );
-        }
-
         let got = pixmap.encode_png().unwrap();
         png_check("layout-no-titlebar", &got);
     }
 
     #[test]
     fn layout_no_border() {
-        let mut pixmap = Pixmap::new(400, 400).unwrap();
-        pixmap.fill(Color::WHITE);
-
-        pixmap.fill_rect(
-            tiny_skia::Rect::from_xywh(100.0, 100.0, 200.0, 200.0).unwrap(),
-            &Paint {
-                shader: Shader::SolidColor(Color::BLACK),
-                ..Default::default()
-            },
-            Transform::identity(),
-            None,
-        );
-
-        let mut layout = PartLayout::calc(LayoutConfig {
+        let pixmap = draw_layout(LayoutConfig {
             width: 200,
             height: 200,
             hide_titlebar: false,
             hide_border: true,
             hide_edges: false,
         });
-
-        for (part_idx, PartLayout { surface_rect, .. }) in layout.iter_mut().enumerate() {
-            let color = match part_idx {
-                PartId::TOP => Color::from_rgba8(0, 0, 255, 255),
-                PartId::LEFT => Color::from_rgba8(255, 0, 0, 255),
-                PartId::RIGHT => Color::from_rgba8(255, 0, 0, 255),
-                PartId::BOTTOM => Color::from_rgba8(0, 0, 255, 255),
-                PartId::HEADER => Color::from_rgba8(255, 255, 0, 255),
-                _ => unreachable!(),
-            };
-
-            pixmap.fill_rect(
-                tiny_skia::Rect::from_xywh(
-                    surface_rect.x as f32 + 100.0,
-                    surface_rect.y as f32 + 100.0,
-                    surface_rect.width as f32,
-                    surface_rect.height as f32,
-                )
-                .unwrap(),
-                &Paint {
-                    shader: Shader::SolidColor(color),
-                    ..Default::default()
-                },
-                Transform::identity(),
-                None,
-            );
-        }
-
         let got = pixmap.encode_png().unwrap();
         png_check("layout-no-border", &got);
+    }
+
+    #[test]
+    fn layout_no_titlebar_and_border() {
+        let pixmap = draw_layout(LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: true,
+            hide_border: true,
+            hide_edges: false,
+        });
+        let got = pixmap.encode_png().unwrap();
+        png_check("layout-no-titlebar-and-border", &got);
     }
 }
