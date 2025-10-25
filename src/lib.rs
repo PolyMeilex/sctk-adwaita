@@ -909,3 +909,195 @@ fn get_margin_h_lp(state: &WindowState, hider_border: bool) -> f32 {
         theme::visible_border_size(hider_border) as f32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
+    use tiny_skia::{Paint, Shader};
+
+    use crate::parts::PartLayout;
+
+    use super::*;
+
+    fn expected_file_path(name: &str) -> String {
+        format!("./tests/parts/{name}.expected.png")
+    }
+    fn got_file_path(name: &str) -> String {
+        format!("./tests/parts/{name}.got.png")
+    }
+
+    #[track_caller]
+    fn png_check(name: &str, got: &[u8]) {
+        let expected = std::fs::read(expected_file_path(name)).unwrap();
+        std::fs::write(got_file_path(name), got).unwrap();
+        assert_eq!(
+            expected,
+            got,
+            "Mismatch in the file: {}",
+            got_file_path(name)
+        );
+    }
+
+    #[allow(unused)]
+    #[track_caller]
+    fn png_update_expected(name: &str, got: &[u8]) {
+        std::fs::write(expected_file_path(name), got).unwrap();
+    }
+
+    fn test_layout_config() -> LayoutConfig {
+        LayoutConfig {
+            width: 200,
+            height: 200,
+            hide_titlebar: false,
+            hide_border: false,
+            hide_edges: false,
+        }
+    }
+
+    fn draw_test_part(layout_config: LayoutConfig, part_id: PartId) -> Pixmap {
+        let layout = PartLayout::calc(layout_config);
+
+        let rect = layout[part_id as usize].surface_rect;
+
+        let mut pixmap = Pixmap::new(rect.width, rect.height).unwrap();
+
+        let theme = ColorTheme::dark();
+        let colors = theme.for_state(true);
+
+        let buttons = Buttons::new(None);
+        let mut shadow = Shadow::default();
+
+        draw_part(
+            part_id,
+            rect,
+            &mut pixmap.as_mut(),
+            None,
+            1,
+            true,
+            &WindowState::ACTIVATED,
+            colors,
+            &buttons,
+            Location::None,
+            layout_config.hide_border,
+            layout_config.hide_titlebar,
+            &mut shadow,
+        );
+
+        pixmap
+    }
+
+    #[test]
+    fn part_left() {
+        let got = draw_test_part(test_layout_config(), PartId::Left)
+            .encode_png()
+            .unwrap();
+        png_check("part-left", &got);
+    }
+
+    #[test]
+    fn part_right() {
+        let got = draw_test_part(test_layout_config(), PartId::Right)
+            .encode_png()
+            .unwrap();
+        png_check("part-right", &got);
+    }
+
+    #[test]
+    fn part_top() {
+        let got = draw_test_part(test_layout_config(), PartId::Top)
+            .encode_png()
+            .unwrap();
+        png_check("part-top", &got);
+    }
+
+    #[test]
+    fn part_bottom() {
+        let got = draw_test_part(test_layout_config(), PartId::Bottom)
+            .encode_png()
+            .unwrap();
+        png_check("part-bottom", &got);
+    }
+
+    #[test]
+    fn part_header() {
+        let got = draw_test_part(test_layout_config(), PartId::Header)
+            .encode_png()
+            .unwrap();
+        png_check("part-header", &got);
+    }
+
+    fn draw_combined(layout_config: LayoutConfig) -> Pixmap {
+        let layout = PartLayout::calc(layout_config);
+
+        let mut pixmap = Pixmap::new(400, 400).unwrap();
+        pixmap.fill(Color::WHITE);
+
+        let root_x = 100;
+        let root_y = 100;
+
+        pixmap.fill_rect(
+            tiny_skia::Rect::from_xywh(root_x as f32, root_y as f32, 200.0, 200.0).unwrap(),
+            &Paint {
+                shader: Shader::SolidColor(Color::TRANSPARENT),
+                ..Default::default()
+            },
+            Transform::identity(),
+            None,
+        );
+
+        let mut draw_pixmap = |part_id: PartId| {
+            let part = draw_test_part(layout_config, part_id);
+            let rect = layout[part_id as usize].surface_rect;
+            pixmap.draw_pixmap(
+                root_x + rect.x,
+                root_y + rect.y,
+                part.as_ref(),
+                &PixmapPaint::default(),
+                Transform::identity(),
+                None,
+            );
+        };
+
+        for id in 0..PartId::COUNT {
+            if layout_config.hide_titlebar && id == PartId::Header as usize {
+                continue;
+            }
+            draw_pixmap(PartId::from_usize(id));
+        }
+
+        pixmap
+    }
+
+    #[test]
+    fn combined_parts() {
+        let layout_config = test_layout_config();
+        let got = draw_combined(layout_config).encode_png().unwrap();
+        png_check("combined-parts", &got);
+    }
+
+    #[test]
+    fn combined_parts_no_titlebar() {
+        let mut layout_config = test_layout_config();
+        layout_config.hide_titlebar = true;
+        let got = draw_combined(layout_config).encode_png().unwrap();
+        png_check("combined-parts-no-titlebar", &got);
+    }
+
+    #[test]
+    fn combined_parts_no_border() {
+        let mut layout_config = test_layout_config();
+        layout_config.hide_border = true;
+        let got = draw_combined(layout_config).encode_png().unwrap();
+        png_check("combined-parts-no-border", &got);
+    }
+
+    #[test]
+    fn combined_parts_no_titlebar_and_border() {
+        let mut layout_config = test_layout_config();
+        layout_config.hide_titlebar = true;
+        layout_config.hide_border = true;
+        let got = draw_combined(layout_config).encode_png().unwrap();
+        png_check("combined-parts-no-titlebar-and-border", &got);
+    }
+}

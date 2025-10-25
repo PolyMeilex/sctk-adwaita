@@ -32,7 +32,7 @@ impl PartId {
     const HEADER: usize = Self::Header as usize;
     pub const COUNT: usize = 5;
 
-    fn from_usize(v: usize) -> Self {
+    pub fn from_usize(v: usize) -> Self {
         match v {
             Self::TOP => PartId::Top,
             Self::LEFT => PartId::Left,
@@ -180,17 +180,17 @@ pub struct LayoutConfig {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-struct PartLayout {
+pub struct PartLayout {
     /// Positioned relative to the main surface.
-    surface_rect: Rect,
+    pub surface_rect: Rect,
     /// Positioned relative to the local surface, aka. `surface_rect`.
     ///
     /// `None` if it fully covers `surface_rect`.
-    input_rect: Option<Rect>,
+    pub input_rect: Option<Rect>,
 }
 
 impl PartLayout {
-    fn calc(config: LayoutConfig) -> [Self; 5] {
+    pub fn calc(config: LayoutConfig) -> [Self; 5] {
         let LayoutConfig {
             width,
             height,
