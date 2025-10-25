@@ -912,7 +912,7 @@ fn get_margin_h_lp(state: &WindowState, hider_border: bool) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
     use tiny_skia::{Paint, Shader};
 
@@ -931,12 +931,10 @@ mod tests {
     fn png_check(name: &str, got: &[u8]) {
         let expected = std::fs::read(expected_file_path(name)).unwrap();
         std::fs::write(got_file_path(name), got).unwrap();
-        assert_eq!(
-            expected,
-            got,
-            "Mismatch in the file: {}",
-            got_file_path(name)
-        );
+
+        if expected != got {
+            panic!("Mismatch in the file: {}", got_file_path(name));
+        }
     }
 
     #[allow(unused)]
