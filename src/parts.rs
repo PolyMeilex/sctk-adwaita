@@ -360,14 +360,7 @@ mod tests {
 
     #[track_caller]
     fn png_check(name: &str, got: &[u8]) {
-        std::fs::write(got_file_path(name), got).unwrap();
-
-        let expected = Pixmap::load_png(expected_file_path(name)).unwrap();
-        let got = Pixmap::load_png(got_file_path(name)).unwrap();
-
-        if expected != got {
-            panic!("Mismatch in the file: {}", got_file_path(name));
-        }
+        crate::tests::utils::png_check(&expected_file_path(name), &got_file_path(name), got);
     }
 
     #[allow(unused)]

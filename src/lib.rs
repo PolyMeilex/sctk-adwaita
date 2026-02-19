@@ -915,6 +915,22 @@ mod tests {
 
     use super::*;
 
+    pub mod utils {
+        use tiny_skia::Pixmap;
+
+        #[track_caller]
+        pub fn png_check(expected_path: &str, got_path: &str, got: &[u8]) {
+            std::fs::write(got_path, got).unwrap();
+
+            let expected = Pixmap::load_png(expected_path).unwrap();
+            let got = Pixmap::load_png(got_path).unwrap();
+
+            if expected != got {
+                panic!("Mismatch in the file: {got_path} != {expected_path}");
+            }
+        }
+    }
+
     fn expected_file_path(name: &str) -> String {
         format!("./tests/parts/{name}.expected.png")
     }
@@ -924,14 +940,7 @@ mod tests {
 
     #[track_caller]
     fn png_check(name: &str, got: &[u8]) {
-        std::fs::write(got_file_path(name), got).unwrap();
-
-        let expected = Pixmap::load_png(expected_file_path(name)).unwrap();
-        let got = Pixmap::load_png(got_file_path(name)).unwrap();
-
-        if expected != got {
-            panic!("Mismatch in the file: {}", got_file_path(name));
-        }
+        utils::png_check(&expected_file_path(name), &got_file_path(name), got);
     }
 
     #[allow(unused)]
