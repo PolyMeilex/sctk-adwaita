@@ -430,8 +430,11 @@ mod tests {
 
     #[track_caller]
     fn png_check(name: &str, got: &[u8]) {
-        let expected = std::fs::read(expected_file_path(name)).unwrap();
         std::fs::write(got_file_path(name), got).unwrap();
+
+        let expected = Pixmap::load_png(expected_file_path(name)).unwrap();
+        let got = Pixmap::load_png(got_file_path(name)).unwrap();
+
         if expected != got {
             panic!("Mismatch in the file: {}", got_file_path(name));
         }
