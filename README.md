@@ -11,6 +11,13 @@
 ## Title text: ab_glyph
 By default title text is drawn with _ab_glyph_ crate. This can be disabled by disabling default features.
 
+## Title text: skrifa
+Title text can be drawn with the _skrifa_ crate. No dynamically linked dependencies required.
+
+```toml
+sctk-adwaita = { default-features = false, features = ["skrifa"] }
+```
+
 ## Title text: crossfont
 Alternatively title text may be drawn with _crossfont_ crate. This adds a requirement on _freetype_.
 
