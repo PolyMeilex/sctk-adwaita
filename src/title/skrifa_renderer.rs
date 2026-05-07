@@ -7,7 +7,7 @@
 use crate::title::{config, font_preference::FontPreference};
 use skrifa::{
     instance::{LocationRef, Size},
-    outline::{DrawSettings, OutlinePen},
+    outline::{DrawSettings, HintingInstance, HintingOptions, OutlinePen},
     MetadataProvider,
 };
 use std::{fs::File, process::Command};
@@ -87,6 +87,11 @@ impl SkrifaTitleText {
         let charmap = font.charmap();
         let outlines = font.outline_glyphs();
 
+        // Create a hinting instance for better glyph quality at small sizes.
+        // Falls back to unhinted rendering if the font doesn't support hinting.
+        let hinting =
+            HintingInstance::new(&outlines, size, location, HintingOptions::default()).ok();
+
         // Layout glyphs and collect paths
         let mut paths: Vec<(tiny_skia::Path, f32, f32)> = Vec::new();
         let mut caret: f32 = 0.0;
@@ -110,7 +115,10 @@ impl SkrifaTitleText {
             let mut pen = PathPen(&mut pb);
 
             if let Some(outline) = outlines.get(glyph_id) {
-                let settings = DrawSettings::unhinted(size, location);
+                let settings = match &hinting {
+                    Some(h) => DrawSettings::from(h),
+                    None => DrawSettings::unhinted(size, location),
+                };
                 let _ = outline.draw(settings, &mut pen);
             }
 
