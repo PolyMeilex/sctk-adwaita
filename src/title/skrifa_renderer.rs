@@ -221,3 +221,77 @@ impl OutlinePen for PathPen<'_> {
         self.0.close();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+
+    /// Helper to create a renderer using only the bundled Cantarell font.
+    fn new_renderer() -> SkrifaTitleText {
+        let mut renderer = SkrifaTitleText {
+            title: String::new(),
+            font: None, // forces fallback to bundled Cantarell
+            original_px_size: 13.3,
+            px_size: 13.3,
+            color: Color::BLACK,
+            pixmap: None,
+        };
+        renderer.update_title("Hello");
+        renderer
+    }
+
+    #[test]
+    fn renders_non_empty_pixmap() {
+        let renderer = new_renderer();
+        let pixmap = renderer.pixmap().expect("should produce a pixmap");
+        assert!(pixmap.width() > 0);
+        assert!(pixmap.height() > 0);
+    }
+
+    #[test]
+    fn renders_pixels_with_coverage() {
+        let renderer = new_renderer();
+        let pixmap = renderer.pixmap().expect("should produce a pixmap");
+        // At least some pixels should have non-zero alpha (i.e. glyphs were drawn)
+        let has_visible = pixmap.pixels().iter().any(|px| px.alpha() > 0);
+        assert!(has_visible, "rendered text should have visible pixels");
+    }
+
+    #[test]
+    fn empty_title_returns_none() {
+        let mut renderer = new_renderer();
+        renderer.update_title("");
+        assert!(renderer.pixmap().is_none());
+    }
+
+    #[test]
+    fn update_scale_changes_size() {
+        let mut renderer = new_renderer();
+        let w1 = renderer.pixmap().expect("pixmap").width();
+        renderer.update_scale(2);
+        let w2 = renderer.pixmap().expect("pixmap after scale").width();
+        assert!(w2 > w1, "scaled text should be wider");
+    }
+
+    #[test]
+    fn update_color_rerenders() {
+        let mut renderer = new_renderer();
+        let old_pixels: Vec<_> = renderer.pixmap().unwrap().pixels().to_vec();
+        renderer.update_color(Color::from_rgba8(255, 0, 0, 255));
+        let new_pixels: Vec<_> = renderer.pixmap().unwrap().pixels().to_vec();
+        assert_ne!(
+            old_pixels, new_pixels,
+            "color change should produce different pixels"
+        );
+    }
+
+    #[test]
+    fn parse_bundled_font_succeeds() {
+        let font = parse_font(&None);
+        let metrics = font.metrics(Size::new(16.0), LocationRef::default());
+        assert!(metrics.units_per_em > 0);
+        assert!(metrics.ascent > 0.0);
+    }
+}
