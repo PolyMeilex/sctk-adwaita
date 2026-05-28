@@ -6,9 +6,9 @@
 //! if the system font doesn't work.
 use crate::title::{config, font_preference::FontPreference};
 use skrifa::{
-    instance::{LocationRef, Size},
+    instance::{Location, LocationRef, Size},
     outline::{DrawSettings, HintingInstance, HintingOptions, OutlinePen},
-    MetadataProvider,
+    MetadataProvider, Tag,
 };
 use std::{fs::File, process::Command};
 use tiny_skia::{Color, FillRule, Paint, Pixmap, Transform};
@@ -79,8 +79,17 @@ impl SkrifaTitleText {
         }
 
         let font = parse_font(&self.font);
+        let font_pref = self.font.as_ref().map(|(_, pref)| pref);
         let size = Size::new(self.px_size);
-        let location = LocationRef::default();
+        let is_bold = font_pref
+            .and_then(|p| p.style.as_deref())
+            .is_some_and(|s| s.eq_ignore_ascii_case("bold"));
+        let location_storage = if is_bold {
+            font.axes().location([(Tag::new(b"wght"), 700.0f32)])
+        } else {
+            Location::default()
+        };
+        let location = LocationRef::from(&location_storage);
 
         let metrics = font.metrics(size, location);
         let glyph_metrics = font.glyph_metrics(size, location);
