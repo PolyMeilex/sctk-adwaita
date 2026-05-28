@@ -1,5 +1,10 @@
 ## [Unreleased]
 - Add the option to hide the borders `FrameConfig::hide_border`
+- `skrifa` feature got added (for `skrifa` based title rendering)
+    - Can be enabled like this:
+        ```toml
+        sctk-adwaita = { default-features = false, features = ["skrifa"] }
+        ```
 
 ## 0.11.0
 - Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
