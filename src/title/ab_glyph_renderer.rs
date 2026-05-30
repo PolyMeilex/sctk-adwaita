@@ -4,7 +4,10 @@
 //!
 //! Can fallback to a embedded Cantarell-Regular.ttf font (SIL Open Font Licence v1.1)
 //! if the system font doesn't work.
-use crate::title::{config, font_preference::FontPreference};
+//!
+//! Per-codepoint fallback faces (emoji, CJK, …) are discovered via `fc-match`;
+//! see [`crate::title::font_fallback`].
+use crate::title::{config, font_fallback::FallbackCache, font_preference::FontPreference};
 use ab_glyph::{point, Font, FontRef, Glyph, PxScale, PxScaleFont, ScaleFont, VariableFont};
 use std::{fs::File, process::Command};
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
@@ -15,6 +18,7 @@ const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
 pub struct AbGlyphTitleText {
     title: String,
     font: Option<(memmap2::Mmap, FontPreference)>,
+    fallbacks: FallbackCache,
     original_px_size: f32,
     size: PxScale,
     color: Color,
@@ -39,6 +43,7 @@ impl AbGlyphTitleText {
         Self {
             title: <_>::default(),
             font,
+            fallbacks: FallbackCache::default(),
             original_px_size: size.x,
             size,
             color,
@@ -58,6 +63,7 @@ impl AbGlyphTitleText {
         let new_title = title.into();
         if new_title != self.title {
             self.title = new_title;
+            self.discover_fallbacks();
             self.pixmap = self.render();
         }
     }
@@ -73,97 +79,150 @@ impl AbGlyphTitleText {
         self.pixmap.as_ref()
     }
 
+    /// Load additional faces for any title codepoint not covered by the primary
+    /// font or any previously-loaded fallback.
+    fn discover_fallbacks(&mut self) {
+        let primary = parse_font(&self.font);
+        self.fallbacks.extend(&self.title, |c, loaded| {
+            covers(&primary, c)
+                || loaded
+                    .iter()
+                    .any(|m| FontRef::try_from_slice(m).is_ok_and(|fr| covers(&fr, c)))
+        });
+    }
+
     /// Render returning the new `Pixmap`.
     fn render(&self) -> Option<Pixmap> {
-        let font = parse_font(&self.font);
-        let font = font.as_scaled(self.size);
-
-        let glyphs: Vec<_> = self
-            .layout(&font)
-            .into_iter()
-            .filter_map(|g| font.outline_glyph(g))
+        let primary = parse_font(&self.font).into_scaled(self.size);
+        let fallbacks: Vec<_> = self
+            .fallbacks
+            .fonts
+            .iter()
+            .filter_map(|m| FontRef::try_from_slice(m).ok())
+            .map(|fr| fr.into_scaled(self.size))
             .collect();
 
-        // calc combined px bound coordinates of the rendered glyphs
-        // Note: It is possible for min.x to be negative, e.g. the first glyph's
-        //       outline extends a little out to the left further than the layout x origin 0.0
-        let all_px_bounds = glyphs.iter().map(|g| g.px_bounds()).reduce(|mut b, next| {
-            b.min.x = b.min.x.min(next.min.x);
-            b.max.x = b.max.x.max(next.max.x);
-            // min(0.0): consistently allocate enough for the whole ascent even
-            //           if all glyphs don't need that much, makes positioning easier later.
-            //           If removed the pixmap will be exactly sized, but we'd need a
-            //           vertical offset to render, say "Tg" vs "gg", consistently
-            b.min.y = b.min.y.min(next.min.y).min(0.0);
-            b.max.y = b.max.y.max(next.max.y);
-            b
-        })?;
+        let placements = layout(&primary, &fallbacks, &self.title);
+        let last = placements.last()?;
+        let last_font = font_at(&primary, &fallbacks, last.font_idx);
+        // + 2 because ab_glyph likes to draw outside of its area,
+        // so we add 1px border around the pixmap
+        let width = (last.glyph.position.x + last_font.h_advance(last.glyph.id)).ceil() as u32 + 2;
+        let height = primary.height().ceil() as u32 + 2;
 
-        let width = all_px_bounds.width() as _;
-        let mut pixmap = Pixmap::new(width, all_px_bounds.height() as _)?;
+        let mut pixmap = Pixmap::new(width, height)?;
+
         let pixels = pixmap.pixels_mut();
 
-        for glyph in glyphs {
-            let bounds = glyph.px_bounds();
-            // calc top/left ords in pixmap space
-            // pixmap-x=0 means the *left most pixel*, equivalent to
-            // px_bounds.min.x which *may be non-zero* (and similarly with y)
-            // so `- px_bounds.min` converts the left-most/top-most to 0
-            let pixmap_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
-            let pixmap_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
-            glyph.draw(|x, y, c| {
-                // `ab_glyph` may return values greater than 1.0, but they are defined to be
-                // same as 1.0. For our purposes, we need to constrain this value.
-                let c = c.min(1.0);
+        for Placement { font_idx, glyph } in placements {
+            let font = font_at(&primary, &fallbacks, font_idx);
+            if let Some(outline) = font.outline_glyph(glyph) {
+                let bounds = outline.px_bounds();
+                let left = bounds.min.x as u32;
+                let top = bounds.min.y as u32;
+                outline.draw(|x, y, c| {
+                    // `ab_glyph` may return values greater than 1.0, but they are defined to be
+                    // same as 1.0. For our purposes, we need to constrain this value.
+                    let c = c.min(1.0);
 
-                let p_idx = (pixmap_top + y) * width + pixmap_left + x;
-                let Some(pixel) = pixels.get_mut(p_idx as usize) else {
-                    debug_assert!(
-                        false,
-                        "oob pixel: x={x} y={y} top={pixmap_top} left={pixmap_left}, w={width}"
-                    );
-                    return;
-                };
+                    // offset the index by 1, so it is in the center of the pixmap
+                    let p_idx = (top + y + 1) * width + (left + x + 1);
+                    let Some(pixel) = pixels.get_mut(p_idx as usize) else {
+                        // Expected when a fallback glyph (emoji, CJK) draws
+                        // outside the primary font's height bound.
+                        log::debug!("Ignoring out of range pixel (pixel id: {p_idx})");
+                        return;
+                    };
 
-                let old_alpha_u8 = pixel.alpha();
+                    let old_alpha_u8 = pixel.alpha();
 
-                let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
-                if let Some(px) = PremultipliedColorU8::from_rgba(
-                    (self.color.red() * new_alpha * 255.0) as _,
-                    (self.color.green() * new_alpha * 255.0) as _,
-                    (self.color.blue() * new_alpha * 255.0) as _,
-                    (new_alpha * 255.0) as _,
-                ) {
-                    *pixel = px;
-                }
-            })
+                    let new_alpha = c + (old_alpha_u8 as f32 / 255.0);
+                    if let Some(px) = PremultipliedColorU8::from_rgba(
+                        (self.color.red() * new_alpha * 255.0) as _,
+                        (self.color.green() * new_alpha * 255.0) as _,
+                        (self.color.blue() * new_alpha * 255.0) as _,
+                        (new_alpha * 255.0) as _,
+                    ) {
+                        *pixel = px;
+                    }
+                })
+            }
         }
 
         Some(pixmap)
     }
+}
 
-    /// Simple single-line glyph layout starting from `(0, ascent)`.
-    fn layout(&self, font: &PxScaleFont<impl Font>) -> Vec<Glyph> {
-        let mut caret = point(0.0, font.ascent());
-        let mut last_glyph: Option<Glyph> = None;
-        let mut target = Vec::new();
-        for c in self.title.chars() {
-            if c.is_control() {
-                continue;
-            }
-            let mut glyph = font.scaled_glyph(c);
-            if let Some(previous) = last_glyph.take() {
-                caret.x += font.kern(previous.id, glyph.id);
-            }
-            glyph.position = caret;
+/// One positioned glyph plus the index of the font it came from
+/// (`0` = primary, `1..=n` = `fallbacks[idx-1]`).
+struct Placement {
+    font_idx: usize,
+    glyph: Glyph,
+}
 
-            last_glyph = Some(glyph.clone());
-            caret.x += font.h_advance(glyph.id);
+fn font_at<'a, F: Font>(
+    primary: &'a PxScaleFont<F>,
+    fallbacks: &'a [PxScaleFont<F>],
+    idx: usize,
+) -> &'a PxScaleFont<F> {
+    idx.checked_sub(1)
+        .and_then(|i| fallbacks.get(i))
+        .unwrap_or(primary)
+}
 
-            target.push(glyph);
-        }
-        target
+/// Pick the first font (primary, then fallbacks) that has a glyph for `c`.
+/// Returns the font index and the scaled glyph. Falls back to the primary
+/// (`.notdef`) when no font covers `c`.
+fn select<F: Font>(
+    primary: &PxScaleFont<F>,
+    fallbacks: &[PxScaleFont<F>],
+    c: char,
+) -> (usize, Glyph) {
+    let g = primary.scaled_glyph(c);
+    if g.id.0 != 0 {
+        return (0, g);
     }
+    for (i, f) in fallbacks.iter().enumerate() {
+        let g = f.scaled_glyph(c);
+        if g.id.0 != 0 {
+            return (i + 1, g);
+        }
+    }
+    (0, primary.scaled_glyph(c))
+}
+
+fn covers<F: Font>(font: &F, c: char) -> bool {
+    font.glyph_id(c).0 != 0
+}
+
+/// Single-line layout across the primary + fallback fonts. Line metrics come
+/// from the primary; per-glyph advance comes from the covering font. Kerning
+/// is applied only between adjacent glyphs from the same font.
+fn layout<F: Font>(
+    primary: &PxScaleFont<F>,
+    fallbacks: &[PxScaleFont<F>],
+    title: &str,
+) -> Vec<Placement> {
+    let mut caret = point(0.0, primary.ascent());
+    let mut last: Option<(usize, Glyph)> = None;
+    let mut out = Vec::new();
+    for c in title.chars() {
+        if c.is_control() {
+            continue;
+        }
+        let (idx, mut glyph) = select(primary, fallbacks, c);
+        let font = font_at(primary, fallbacks, idx);
+        if let Some((prev_idx, prev_glyph)) = last.take() {
+            if prev_idx == idx {
+                caret.x += font.kern(prev_glyph.id, glyph.id);
+            }
+        }
+        glyph.position = caret;
+        caret.x += font.h_advance(glyph.id);
+        last = Some((idx, glyph.clone()));
+        out.push(Placement { font_idx: idx, glyph });
+    }
+    out
 }
 
 /// Parse the memmapped system font or fallback to built-in cantarell.
@@ -214,4 +273,49 @@ fn font_file_matching(pref: &FontPreference) -> Option<File> {
 fn mmap(file: &File) -> Option<memmap2::Mmap> {
     // Safety: System font files are not expected to be mutated during use
     unsafe { memmap2::Mmap::map(file).ok() }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+
+    fn new_renderer(title: &str) -> AbGlyphTitleText {
+        let mut renderer = AbGlyphTitleText {
+            title: String::new(),
+            font: None, // forces fallback to bundled Cantarell
+            fallbacks: FallbackCache::default(),
+            original_px_size: 17.6,
+            size: PxScale { x: 17.6, y: 17.6 },
+            color: Color::BLACK,
+            pixmap: None,
+        };
+        renderer.update_title(title);
+        renderer
+    }
+
+    /// Regression: '★' is not in Cantarell. Before this fix it silently
+    /// rendered as Cantarell's `.notdef` glyph. The fix must load a fallback
+    /// face that has it. Verified separately on pre-fix code (rendering a
+    /// missing codepoint and a different missing codepoint produced
+    /// byte-identical pixmaps — both `.notdef`).
+    #[test]
+    fn loads_fallback_for_missing_codepoint() {
+        let renderer = new_renderer("★");
+        assert!(
+            !renderer.fallbacks.fonts.is_empty(),
+            "'★' is not in Cantarell — a fallback face must have been loaded"
+        );
+    }
+
+    /// Pure-ASCII titles must not trigger any fallback lookups.
+    #[test]
+    fn no_fallback_for_ascii_title() {
+        let renderer = new_renderer("hello");
+        assert!(
+            renderer.fallbacks.fonts.is_empty(),
+            "ASCII fits in Cantarell, no fallback should be loaded"
+        );
+    }
 }
