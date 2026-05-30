@@ -4,11 +4,14 @@
 //!
 //! Can fallback to an embedded Cantarell-Regular.ttf font (SIL Open Font Licence v1.1)
 //! if the system font doesn't work.
-use crate::title::{config, font_preference::FontPreference};
+//!
+//! Per-codepoint fallback faces (emoji, CJK, …) are discovered via `fc-match`;
+//! see [`crate::title::font_fallback`].
+use crate::title::{config, font_fallback::FallbackCache, font_preference::FontPreference};
 use skrifa::{
     instance::{LocationRef, Size},
     outline::{DrawSettings, HintingInstance, HintingOptions, OutlinePen},
-    MetadataProvider,
+    GlyphId, MetadataProvider,
 };
 use std::{fs::File, process::Command};
 use tiny_skia::{Color, FillRule, Paint, Pixmap, Transform};
@@ -19,6 +22,7 @@ const CANTARELL: &[u8] = include_bytes!("Cantarell-Regular.ttf");
 pub struct SkrifaTitleText {
     title: String,
     font: Option<(memmap2::Mmap, FontPreference)>,
+    fallbacks: FallbackCache,
     original_px_size: f32,
     px_size: f32,
     color: Color,
@@ -38,6 +42,7 @@ impl SkrifaTitleText {
         Self {
             title: <_>::default(),
             font,
+            fallbacks: FallbackCache::default(),
             original_px_size: px_size,
             px_size,
             color,
@@ -57,6 +62,7 @@ impl SkrifaTitleText {
         let new_title = title.into();
         if new_title != self.title {
             self.title = new_title;
+            self.discover_fallbacks();
             self.pixmap = self.render();
         }
     }
@@ -72,50 +78,62 @@ impl SkrifaTitleText {
         self.pixmap.as_ref()
     }
 
+    /// Load additional faces for any title codepoint not covered by the primary
+    /// font or any previously-loaded fallback.
+    fn discover_fallbacks(&mut self) {
+        let primary = parse_font(&self.font);
+        self.fallbacks.extend(&self.title, |c, loaded| {
+            covers(&primary, c)
+                || loaded
+                    .iter()
+                    .any(|m| skrifa::FontRef::from_index(m, 0).is_ok_and(|fr| covers(&fr, c)))
+        });
+    }
+
     /// Render returning the new `Pixmap`.
     fn render(&self) -> Option<Pixmap> {
         if self.title.is_empty() {
             return None;
         }
 
-        let font = parse_font(&self.font);
+        let primary = parse_font(&self.font);
+        let fallbacks: Vec<_> = self
+            .fallbacks
+            .fonts
+            .iter()
+            .filter_map(|m| skrifa::FontRef::from_index(m, 0).ok())
+            .collect();
+
         let size = Size::new(self.px_size);
         let location = LocationRef::default();
+        let metrics = primary.metrics(size, location);
 
-        let metrics = font.metrics(size, location);
-        let glyph_metrics = font.glyph_metrics(size, location);
-        let charmap = font.charmap();
-        let outlines = font.outline_glyphs();
+        // Per-font caches: metrics, charmap, outlines, hinting. Hinting falls
+        // back to unhinted rendering if the font doesn't support it.
+        let primary_face = Face::new(&primary, size, location);
+        let fallback_faces: Vec<Face<'_>> = fallbacks
+            .iter()
+            .map(|f| Face::new(f, size, location))
+            .collect();
 
-        // Create a hinting instance for better glyph quality at small sizes.
-        // Falls back to unhinted rendering if the font doesn't support hinting.
-        let hinting =
-            HintingInstance::new(&outlines, size, location, HintingOptions::default()).ok();
-
-        // Layout glyphs and collect paths
+        // Layout: pick the first face (primary, then fallbacks) that covers each char.
         let mut paths: Vec<(tiny_skia::Path, f32, f32)> = Vec::new();
         let mut caret: f32 = 0.0;
         let ascent = metrics.ascent;
 
-        let mut last_glyph_id = None;
         for c in self.title.chars() {
             if c.is_control() {
                 continue;
             }
 
-            let glyph_id = charmap.map(c).unwrap_or_default();
-
-            // Kerning (if available)
-            // Note: skrifa doesn't expose a simple kern method on glyph_metrics,
-            // so we skip kerning for simplicity. The visual difference is minimal
-            // for title bar text.
-            let _ = last_glyph_id;
+            let face = select_face(&primary_face, &fallback_faces, c);
+            let glyph_id = face.charmap_get(c).unwrap_or_default();
 
             let mut pb = tiny_skia::PathBuilder::new();
             let mut pen = PathPen(&mut pb);
 
-            if let Some(outline) = outlines.get(glyph_id) {
-                let settings = match &hinting {
+            if let Some(outline) = face.outlines.get(glyph_id) {
+                let settings = match &face.hinting {
                     Some(h) => DrawSettings::from(h),
                     None => DrawSettings::unhinted(size, location),
                 };
@@ -126,8 +144,7 @@ impl SkrifaTitleText {
                 paths.push((path, caret, ascent));
             }
 
-            caret += glyph_metrics.advance_width(glyph_id).unwrap_or(0.0);
-            last_glyph_id = Some(glyph_id);
+            caret += face.glyph_metrics.advance_width(glyph_id).unwrap_or(0.0);
         }
 
         if paths.is_empty() {
@@ -155,6 +172,61 @@ impl SkrifaTitleText {
 
         Some(pixmap)
     }
+}
+
+/// One parsed face + per-size caches reused across the line.
+struct Face<'a> {
+    charmap: skrifa::charmap::Charmap<'a>,
+    outlines: skrifa::outline::OutlineGlyphCollection<'a>,
+    glyph_metrics: skrifa::metrics::GlyphMetrics<'a>,
+    hinting: Option<HintingInstance>,
+}
+
+impl<'a> Face<'a> {
+    fn new(font: &skrifa::FontRef<'a>, size: Size, location: LocationRef<'a>) -> Self {
+        let outlines = font.outline_glyphs();
+        let hinting =
+            HintingInstance::new(&outlines, size, location, HintingOptions::default()).ok();
+        Self {
+            charmap: font.charmap(),
+            glyph_metrics: font.glyph_metrics(size, location),
+            outlines,
+            hinting,
+        }
+    }
+
+    fn charmap_get(&self, c: char) -> Option<GlyphId> {
+        let id = self.charmap.map(c)?;
+        // Treat `.notdef` (id 0) as no coverage so we look further down the stack.
+        if id == GlyphId::NOTDEF {
+            None
+        } else {
+            Some(id)
+        }
+    }
+}
+
+fn covers(font: &skrifa::FontRef<'_>, c: char) -> bool {
+    match font.charmap().map(c) {
+        Some(id) => id != GlyphId::NOTDEF,
+        None => false,
+    }
+}
+
+/// Pick the first face that covers `c`, falling back to the primary face
+/// (which will draw `.notdef`) when no face has it.
+fn select_face<'a, 'b>(
+    primary: &'a Face<'b>,
+    fallbacks: &'a [Face<'b>],
+    c: char,
+) -> &'a Face<'b> {
+    if primary.charmap_get(c).is_some() {
+        return primary;
+    }
+    fallbacks
+        .iter()
+        .find(|f| f.charmap_get(c).is_some())
+        .unwrap_or(primary)
 }
 
 /// Convert point size to pixel size using font's units_per_em.
@@ -241,6 +313,7 @@ mod tests {
         let mut renderer = SkrifaTitleText {
             title: String::new(),
             font: None, // forces fallback to bundled Cantarell
+            fallbacks: FallbackCache::default(),
             original_px_size: 13.3,
             px_size: 13.3,
             color: Color::BLACK,
@@ -301,5 +374,28 @@ mod tests {
         let metrics = font.metrics(Size::new(16.0), LocationRef::default());
         assert!(metrics.units_per_em > 0);
         assert!(metrics.ascent > 0.0);
+    }
+
+    /// Regression: '★' is not in Cantarell. Before this fix it silently
+    /// rendered as Cantarell's `.notdef` glyph. The fix must load a fallback
+    /// face that has it.
+    #[test]
+    fn loads_fallback_for_missing_codepoint() {
+        let mut renderer = new_renderer();
+        renderer.update_title("★");
+        assert!(
+            !renderer.fallbacks.fonts.is_empty(),
+            "'★' is not in Cantarell — a fallback face must have been loaded"
+        );
+    }
+
+    /// Pure-ASCII titles must not trigger any fallback lookups.
+    #[test]
+    fn no_fallback_for_ascii_title() {
+        let renderer = new_renderer();
+        assert!(
+            renderer.fallbacks.fonts.is_empty(),
+            "ASCII fits in Cantarell, no fallback should be loaded"
+        );
     }
 }
