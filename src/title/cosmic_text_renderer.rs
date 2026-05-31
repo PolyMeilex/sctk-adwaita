@@ -1,17 +1,28 @@
 use crate::title::{config, font_preference::FontPreference};
 use cosmic_text::{
-    Attrs, AttrsList, BufferLine, Color as CosmicColor, Family, FontSystem, Metrics, Shaping,
-    SwashCache, Wrap,
+    Attrs, AttrsList, BufferLine, Color as CosmicColor, Family, FontSystem, Shaping, Style,
+    SwashCache, Weight, Wrap,
 };
 use tiny_skia::{Color, ColorU8, Pixmap, PremultipliedColorU8};
 
 // Use arbitrarily large width, then calculate max/min x from resulting glyphs
 const MAX_WIDTH: f32 = 1024.0 * 1024.0;
 
-fn attrs_from_font_pref(font_preference: &FontPreference) -> Attrs {
-    let attrs = Attrs::new().family(Family::Name(&font_preference.name));
+fn attrs_from_font_pref(font_preference: &FontPreference) -> Attrs<'_> {
+    let mut attrs = Attrs::new().family(Family::Name(&font_preference.name));
+    // The GNOME `titlebar-font` style is a free-form descriptor such as
+    // "Bold", "Italic", or "Bold Italic"; map the keywords we understand onto
+    // cosmic-text weight/style and ignore the rest.
     if let Some(style) = &font_preference.style {
-        // TODO
+        let style = style.to_ascii_lowercase();
+        if style.contains("bold") {
+            attrs = attrs.weight(Weight::BOLD);
+        }
+        if style.contains("italic") {
+            attrs = attrs.style(Style::Italic);
+        } else if style.contains("oblique") {
+            attrs = attrs.style(Style::Oblique);
+        }
     }
     attrs
 }
@@ -79,20 +90,30 @@ impl CosmicTextTitleText {
 
         let shape_line = self.buffer_line.shape(&mut self.font_system);
 
-        let height = (1.4 * self.scale as f32 * self.font_pref.pt_size * 96.0 / 72.0).ceil() as i32; // ?
-        let layout_lines = shape_line.layout(height as f32, MAX_WIDTH, Wrap::Word, None);
-        let layout_line = &layout_lines[0];
+        // Font size in device pixels: points -> pixels at 96 DPI, scaled by
+        // the integer output scale. This is the em size handed to `layout()`,
+        // NOT the line box height.
+        let font_size = self.scale as f32 * self.font_pref.pt_size * 96.0 / 72.0;
+        let layout_lines = shape_line.layout(font_size, MAX_WIDTH, Wrap::Word, None);
+        let Some(layout_line) = layout_lines.first() else {
+            return;
+        };
         let min_x = layout_line
             .glyphs
             .iter()
-            .map(|i| i.x.floor() as u32)
+            .map(|i| i.x.floor() as i32)
             .min()
             .unwrap_or(0);
         let width = layout_line.w.ceil() as u32;
 
-        let mut pixmap = match Pixmap::new(width, height as u32) {
-            Some(pixmap) => pixmap,
-            None => return,
+        // Size the pixmap from the run's actual ascent + descent and place the
+        // baseline at `max_ascent`. Using the font size as the height (with the
+        // baseline pinned to the bottom) clips descenders.
+        let baseline = layout_line.max_ascent.ceil() as i32;
+        let height = (layout_line.max_ascent + layout_line.max_descent).ceil() as u32;
+
+        let Some(mut pixmap) = Pixmap::new(width, height) else {
+            return;
         };
         let pixels = pixmap.pixels_mut();
 
@@ -109,8 +130,11 @@ impl CosmicTextTitleText {
                         return;
                     }
 
-                    let y = height + physical_glyph.y + pixel_y;
-                    let x = physical_glyph.x + pixel_x - min_x as i32;
+                    let y = baseline + physical_glyph.y + pixel_y;
+                    let x = physical_glyph.x + pixel_x - min_x;
+                    if x < 0 || x >= width as i32 {
+                        return;
+                    }
                     let idx = y * width as i32 + x;
                     if idx >= 0 && (idx as usize) < pixels.len() {
                         let idx = idx as usize;
