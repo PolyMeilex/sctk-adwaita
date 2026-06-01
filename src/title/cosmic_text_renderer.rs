@@ -1,12 +1,15 @@
 use crate::title::{config, font_preference::FontPreference};
 use cosmic_text::{
-    Attrs, AttrsList, BufferLine, Color as CosmicColor, Family, FontSystem, Shaping, Style,
-    SwashCache, Weight, Wrap,
+    Attrs, AttrsList, BufferLine, Color as CosmicColor, Family, FontSystem, Hinting, LineEnding,
+    Shaping, Style, SwashCache, Weight, Wrap,
 };
 use tiny_skia::{Color, ColorU8, Pixmap, PremultipliedColorU8};
 
 // Use arbitrarily large width, then calculate max/min x from resulting glyphs
 const MAX_WIDTH: f32 = 1024.0 * 1024.0;
+
+// Title text never contains tabs; this is just the value `shape()` requires.
+const TAB_WIDTH: u16 = 8;
 
 fn attrs_from_font_pref(font_preference: &FontPreference) -> Attrs<'_> {
     let mut attrs = Attrs::new().family(Family::Name(&font_preference.name));
@@ -50,7 +53,12 @@ impl std::fmt::Debug for CosmicTextTitleText {
 
 impl CosmicTextTitleText {
     pub fn new(color: Color) -> Self {
-        let buffer_line = BufferLine::new("", AttrsList::new(Attrs::new()), Shaping::Advanced);
+        let buffer_line = BufferLine::new(
+            "",
+            LineEnding::default(),
+            AttrsList::new(&Attrs::new()),
+            Shaping::Advanced,
+        );
         let cache = SwashCache::new();
         let font_pref = config::titlebar_font().unwrap_or_default();
         Self {
@@ -72,7 +80,7 @@ impl CosmicTextTitleText {
     pub fn update_title<S: Into<String>>(&mut self, title: S) {
         let attrs = attrs_from_font_pref(&self.font_pref);
         self.buffer_line
-            .set_text(title.into(), AttrsList::new(attrs));
+            .set_text(title.into(), LineEnding::default(), AttrsList::new(&attrs));
         self.update_pixmap();
     }
 
@@ -88,13 +96,20 @@ impl CosmicTextTitleText {
     fn update_pixmap(&mut self) {
         self.pixmap = None;
 
-        let shape_line = self.buffer_line.shape(&mut self.font_system);
+        let shape_line = self.buffer_line.shape(&mut self.font_system, TAB_WIDTH);
 
         // Font size in device pixels: points -> pixels at 96 DPI, scaled by
         // the integer output scale. This is the em size handed to `layout()`,
         // NOT the line box height.
         let font_size = self.scale as f32 * self.font_pref.pt_size * 96.0 / 72.0;
-        let layout_lines = shape_line.layout(font_size, MAX_WIDTH, Wrap::Word, None);
+        let layout_lines = shape_line.layout(
+            font_size,
+            Some(MAX_WIDTH),
+            Wrap::Word,
+            None,
+            None,
+            Hinting::Disabled,
+        );
         let Some(layout_line) = layout_lines.first() else {
             return;
         };
