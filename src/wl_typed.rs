@@ -13,7 +13,7 @@ where
     #[allow(clippy::extra_unused_type_parameters)]
     pub fn wrap<STATE>(i: I) -> Self
     where
-        STATE: Dispatch<I, DATA>,
+        DATA: Dispatch<I, STATE>,
     {
         Self(i, PhantomData)
     }

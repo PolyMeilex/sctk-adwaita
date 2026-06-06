@@ -23,18 +23,17 @@ use tiny_skia::{
 
 use smithay_client_toolkit::reexports::client::backend::ObjectId;
 use smithay_client_toolkit::reexports::client::protocol::wl_shm;
-use smithay_client_toolkit::reexports::client::protocol::wl_subsurface::WlSubsurface;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
-use smithay_client_toolkit::reexports::client::{Dispatch, Proxy, QueueHandle};
+use smithay_client_toolkit::reexports::client::{Proxy, QueueHandle};
 use smithay_client_toolkit::reexports::csd_frame::{
     CursorIcon, DecorationsFrame, FrameAction, FrameClick, WindowManagerCapabilities, WindowState,
 };
 
-use smithay_client_toolkit::compositor::{CompositorState, Region, SurfaceData};
+use smithay_client_toolkit::compositor::{CompositorHandler, CompositorState, Region, SurfaceData};
+use smithay_client_toolkit::output::OutputHandler;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::shm::{slot::SlotPool, Shm};
 use smithay_client_toolkit::subcompositor::SubcompositorState;
-use smithay_client_toolkit::subcompositor::SubsurfaceData;
 
 mod buttons;
 mod config;
@@ -110,7 +109,7 @@ pub struct AdwaitaFrame<State> {
 
 impl<State> AdwaitaFrame<State>
 where
-    State: Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    State: CompositorHandler + OutputHandler + 'static,
 {
     pub fn new(
         base_surface: &impl WaylandSurface,
@@ -378,7 +377,7 @@ where
 
 impl<State> DecorationsFrame for AdwaitaFrame<State>
 where
-    State: Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    State: CompositorHandler + OutputHandler + 'static,
 {
     fn update_state(&mut self, state: WindowState) {
         let difference = self.state.symmetric_difference(state);

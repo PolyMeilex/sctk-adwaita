@@ -1,11 +1,12 @@
 use smithay_client_toolkit::reexports::client::{
     backend::ObjectId,
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
-    Dispatch, Proxy, QueueHandle,
+    Proxy, QueueHandle,
 };
 
 use smithay_client_toolkit::{
-    compositor::SurfaceData,
+    compositor::{CompositorHandler, SurfaceData},
+    output::OutputHandler,
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
@@ -58,8 +59,7 @@ impl DecorationParts {
         queue_handle: &QueueHandle<State>,
     ) -> Self
     where
-        State:
-            Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+        State: CompositorHandler + OutputHandler + 'static,
     {
         let parts = [
             Part::new(base_surface, subcompositor, queue_handle),
@@ -316,8 +316,7 @@ impl Part {
         queue_handle: &QueueHandle<State>,
     ) -> Part
     where
-        State:
-            Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+        State: CompositorHandler + OutputHandler + 'static,
     {
         let (subsurface, surface) =
             subcompositor.create_subsurface(parent.inner().clone(), queue_handle);
