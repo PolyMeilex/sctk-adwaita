@@ -151,10 +151,12 @@ impl CosmicTextTitleText {
                         return;
                     }
                     let idx = y * width as i32 + x;
-                    if idx >= 0 && (idx as usize) < pixels.len() {
-                        let idx = idx as usize;
+                    if idx < 0 {
+                        return;
+                    }
+                    if let Some(pixel) = pixels.get_mut(idx as usize) {
                         let color = ColorU8::from_rgba(color.r(), color.g(), color.b(), color.a());
-                        pixels[idx] = alpha_blend(color.premultiply(), pixels[idx]);
+                        *pixel = alpha_blend(color.premultiply(), *pixel);
                     }
                 },
             );
@@ -167,14 +169,18 @@ impl CosmicTextTitleText {
 // `a` over `b`
 // This should be correct but not especially efficient.
 fn alpha_blend(a: PremultipliedColorU8, b: PremultipliedColorU8) -> PremultipliedColorU8 {
+    let inv_alpha = 255 - u16::from(a.alpha());
     let blend_channel = |channel_a: u8, channel_b: u8| -> u8 {
-        channel_a.saturating_add(channel_b.saturating_mul(255 - a.alpha()))
+        let blended = u16::from(channel_a) + u16::from(channel_b) * inv_alpha / 255;
+        blended.min(255) as u8
     };
+    // Channels stay <= alpha through the blend, so this can't actually be
+    // `None`; fall back to the destination pixel rather than panicking.
     PremultipliedColorU8::from_rgba(
         blend_channel(a.red(), b.red()),
         blend_channel(a.green(), b.green()),
         blend_channel(a.blue(), b.blue()),
         blend_channel(a.alpha(), b.alpha()),
     )
-    .unwrap()
+    .unwrap_or(b)
 }
