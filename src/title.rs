@@ -1,18 +1,36 @@
 use tiny_skia::{Color, Pixmap};
 
-#[cfg(any(feature = "crossfont", feature = "skrifa", feature = "ab_glyph"))]
+#[cfg(any(
+    feature = "crossfont",
+    feature = "cosmic-text",
+    feature = "skrifa",
+    feature = "ab_glyph"
+))]
 mod config;
-#[cfg(any(feature = "crossfont", feature = "skrifa", feature = "ab_glyph"))]
+#[cfg(any(
+    feature = "crossfont",
+    feature = "cosmic-text",
+    feature = "skrifa",
+    feature = "ab_glyph"
+))]
 mod font_preference;
 
 #[cfg(feature = "crossfont")]
 mod crossfont_renderer;
 
-#[cfg(all(not(feature = "crossfont"), feature = "skrifa"))]
+#[cfg(all(not(feature = "crossfont"), feature = "cosmic-text"))]
+mod cosmic_text_renderer;
+
+#[cfg(all(
+    not(feature = "crossfont"),
+    not(feature = "cosmic-text"),
+    feature = "skrifa"
+))]
 mod skrifa_renderer;
 
 #[cfg(all(
     not(feature = "crossfont"),
+    not(feature = "cosmic-text"),
     not(feature = "skrifa"),
     feature = "ab_glyph"
 ))]
@@ -20,6 +38,7 @@ mod ab_glyph_renderer;
 
 #[cfg(all(
     not(feature = "crossfont"),
+    not(feature = "cosmic-text"),
     not(feature = "skrifa"),
     not(feature = "ab_glyph")
 ))]
@@ -29,16 +48,24 @@ mod dumb;
 pub struct TitleText {
     #[cfg(feature = "crossfont")]
     imp: crossfont_renderer::CrossfontTitleText,
-    #[cfg(all(not(feature = "crossfont"), feature = "skrifa"))]
+    #[cfg(all(not(feature = "crossfont"), feature = "cosmic-text"))]
+    imp: cosmic_text_renderer::CosmicTextTitleText,
+    #[cfg(all(
+        not(feature = "crossfont"),
+        not(feature = "cosmic-text"),
+        feature = "skrifa"
+    ))]
     imp: skrifa_renderer::SkrifaTitleText,
     #[cfg(all(
         not(feature = "crossfont"),
+        not(feature = "cosmic-text"),
         not(feature = "skrifa"),
         feature = "ab_glyph"
     ))]
     imp: ab_glyph_renderer::AbGlyphTitleText,
     #[cfg(all(
         not(feature = "crossfont"),
+        not(feature = "cosmic-text"),
         not(feature = "skrifa"),
         not(feature = "ab_glyph")
     ))]
@@ -52,13 +79,23 @@ impl TitleText {
             .ok()
             .map(|imp| Self { imp });
 
-        #[cfg(all(not(feature = "crossfont"), feature = "skrifa"))]
+        #[cfg(all(not(feature = "crossfont"), feature = "cosmic-text"))]
+        return Some(Self {
+            imp: cosmic_text_renderer::CosmicTextTitleText::new(color),
+        });
+
+        #[cfg(all(
+            not(feature = "crossfont"),
+            not(feature = "cosmic-text"),
+            feature = "skrifa"
+        ))]
         return Some(Self {
             imp: skrifa_renderer::SkrifaTitleText::new(color),
         });
 
         #[cfg(all(
             not(feature = "crossfont"),
+            not(feature = "cosmic-text"),
             not(feature = "skrifa"),
             feature = "ab_glyph"
         ))]
@@ -68,6 +105,7 @@ impl TitleText {
 
         #[cfg(all(
             not(feature = "crossfont"),
+            not(feature = "cosmic-text"),
             not(feature = "skrifa"),
             not(feature = "ab_glyph")
         ))]

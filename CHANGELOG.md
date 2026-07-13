@@ -5,6 +5,11 @@
         ```toml
         sctk-adwaita = { default-features = false, features = ["skrifa"] }
         ```
+- `cosmic-text` feature got added (for `cosmic-text` based title rendering with shaping and font fallback)
+    - Can be enabled like this:
+        ```toml
+        sctk-adwaita = { default-features = false, features = ["cosmic-text"] }
+        ```
 
 ## 0.11.0
 - Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
