@@ -1,5 +1,6 @@
 ## [Unreleased]
 - Add the option to hide the borders `FrameConfig::hide_border`
+- Simplify `skrifa` title creation.
 - `skrifa` feature got added (for `skrifa` based title rendering)
     - Can be enabled like this:
         ```toml
@@ -14,7 +15,7 @@
 ## 0.11.0
 - Improve `ab_glyph` rendering to properly account for glyph outlines that would have previously been out of bounds
 - Align with new adwaita blue tint #71
-- Add ability to hide the titlebar #69 
+- Add ability to hide the titlebar #69
 - Bump sctk to 0.20
 - Bump crossfont to 0.9.0
 
@@ -46,8 +47,8 @@
 - **Breaking:** `wayland-csd-frame` is now used as a part of the public interface.
 
 ## 0.6.1
-- Bump tiny-skia to v0.11 (#32) 
-- cleanup: Remove debug println (#29) 
+- Bump tiny-skia to v0.11 (#32)
+- cleanup: Remove debug println (#29)
 - Support custom header buttons layouts (#30)
 - The double click threshold value was raised to `400ms`
 
@@ -79,7 +80,7 @@
 - `title` feature got removed
 - `ab_glyph` default feature got added (for `ab_glyph` based title rendering)
 - `crossfont` feature got added (for `crossfont` based title rendering)
-    - Can be enable like this: 
+    - Can be enable like this:
         ```toml
         sctk-adwaita = { default-features = false, features = ["crossfont"] }
         ```
