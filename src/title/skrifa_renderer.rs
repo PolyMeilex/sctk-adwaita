@@ -33,7 +33,9 @@ impl SkrifaTitleText {
             .and_then(|f| mmap(&f))
             .map(|mmap| (mmap, font_pref));
 
-        let px_size = pt_to_px(&font, font_pref_pt_size);
+        // Convert point size to pixel size.
+        // 1pt = 1/72in, 1px = 1/96in, so px = pt * (96/72)
+        let px_size = font_pref_pt_size * (96.0 / 72.0);
 
         Self {
             title: <_>::default(),
@@ -163,20 +165,6 @@ impl SkrifaTitleText {
         }
 
         Some(pixmap)
-    }
-}
-
-/// Convert point size to pixel size using font's units_per_em.
-fn pt_to_px(font_data: &Option<(memmap2::Mmap, FontPreference)>, pt_size: f32) -> f32 {
-    let font = parse_font(font_data);
-    let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-    let units_per_em = metrics.units_per_em as f32;
-    if units_per_em > 0.0 {
-        // Standard conversion: 1pt = 1.333px at 96dpi (96/72)
-        pt_size * (96.0 / 72.0)
-    } else {
-        // Fallback
-        pt_size * 1.333
     }
 }
 
