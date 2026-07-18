@@ -1,4 +1,5 @@
 ## [Unreleased]
+- Support a range of skrifa versions.
 - Add the option to hide the borders `FrameConfig::hide_border`
 - Simplify `skrifa` title creation.
 - `skrifa` feature got added (for `skrifa` based title rendering)
