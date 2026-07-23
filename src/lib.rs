@@ -63,7 +63,7 @@ type SkiaResult = Option<()>;
 #[derive(Debug)]
 pub struct AdwaitaFrame<State> {
     /// The base surface used to create the window.
-    base_surface: WlTyped<WlSurface, SurfaceData>,
+    base_surface: WlTyped<WlSurface, SurfaceData<()>>,
 
     compositor: Arc<CompositorState>,
 
@@ -110,7 +110,7 @@ pub struct AdwaitaFrame<State> {
 
 impl<State> AdwaitaFrame<State>
 where
-    State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    State: Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
 {
     pub fn new(
         base_surface: &impl WaylandSurface,
@@ -378,7 +378,7 @@ where
 
 impl<State> DecorationsFrame for AdwaitaFrame<State>
 where
-    State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+    State: Dispatch<WlSurface, SurfaceData<()>> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
 {
     fn update_state(&mut self, state: WindowState) {
         let difference = self.state.symmetric_difference(state);
