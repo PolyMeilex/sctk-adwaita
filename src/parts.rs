@@ -1,11 +1,12 @@
 use smithay_client_toolkit::reexports::client::{
     backend::ObjectId,
     protocol::{wl_subsurface::WlSubsurface, wl_surface::WlSurface},
-    Dispatch, Proxy, QueueHandle,
+    Proxy, QueueHandle,
 };
 
 use smithay_client_toolkit::{
-    compositor::SurfaceData,
+    compositor::{CompositorHandler, SurfaceData},
+    output::OutputHandler,
     subcompositor::{SubcompositorState, SubsurfaceData},
 };
 
@@ -53,12 +54,12 @@ pub struct DecorationParts {
 
 impl DecorationParts {
     pub fn new<State>(
-        base_surface: &WlTyped<WlSurface, SurfaceData>,
+        base_surface: &WlTyped<WlSurface, SurfaceData<()>>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
     ) -> Self
     where
-        State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+        State: CompositorHandler + OutputHandler + 'static,
     {
         let parts = [
             Part::new(base_surface, subcompositor, queue_handle),
@@ -295,7 +296,7 @@ pub struct Rect {
 
 #[derive(Debug)]
 pub struct Part {
-    pub surface: WlTyped<WlSurface, SurfaceData>,
+    pub surface: WlTyped<WlSurface, SurfaceData<()>>,
     pub subsurface: WlTyped<WlSubsurface, SubsurfaceData>,
 
     /// Positioned relative to the main surface.
@@ -310,12 +311,12 @@ pub struct Part {
 
 impl Part {
     fn new<State>(
-        parent: &WlTyped<WlSurface, SurfaceData>,
+        parent: &WlTyped<WlSurface, SurfaceData<()>>,
         subcompositor: &SubcompositorState,
         queue_handle: &QueueHandle<State>,
     ) -> Part
     where
-        State: Dispatch<WlSurface, SurfaceData> + Dispatch<WlSubsurface, SubsurfaceData> + 'static,
+        State: CompositorHandler + OutputHandler + 'static,
     {
         let (subsurface, surface) =
             subcompositor.create_subsurface(parent.inner().clone(), queue_handle);
