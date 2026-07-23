@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## 0.12.0
+
 - Bump sctk to 0.21
 
 ## 0.11.1
