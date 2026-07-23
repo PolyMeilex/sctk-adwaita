@@ -339,7 +339,7 @@ where
                 };
             }
 
-            if should_sync {
+            if false {
                 part.subsurface.set_sync();
             } else {
                 part.subsurface.set_desync();
@@ -437,6 +437,9 @@ where
     }
 
     fn draw(&mut self) -> bool {
+        if !self.dirty {
+            return false;
+        }
         self.redraw_inner().unwrap_or(true)
     }
 
