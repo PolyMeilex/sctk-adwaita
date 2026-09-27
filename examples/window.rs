@@ -14,9 +14,8 @@ use smithay_client_toolkit::reexports::csd_frame::{
 };
 use smithay_client_toolkit::reexports::protocols::xdg::shell::client::xdg_toplevel::ResizeEdge as XdgResizeEdge;
 use smithay_client_toolkit::{
-    compositor::{CompositorHandler, CompositorState},
-    delegate_compositor, delegate_output, delegate_pointer, delegate_registry, delegate_seat,
-    delegate_shm, delegate_subcompositor, delegate_xdg_shell, delegate_xdg_window,
+    compositor::{CompositorHandler, CompositorState, FrameCallbackData},
+    delegate_registry,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -346,7 +345,7 @@ impl SeatHandler for SimpleWindow {
             let surface = self.compositor_state.create_surface(qh);
             let themed_pointer = self
                 .seat_state
-                .get_pointer_with_theme(
+                .get_pointer_with_theme::<_, ()>(
                     qh,
                     &seat,
                     self.shm_state.wl_shm(),
@@ -512,7 +511,7 @@ impl PointerHandler for SimpleWindow {
 }
 impl SimpleWindow {
     fn frame_action(&mut self, pointer: &wl_pointer::WlPointer, serial: u32, action: FrameAction) {
-        let pointer_data = pointer.data::<PointerData>().unwrap();
+        let pointer_data = pointer.data::<PointerData<()>>().unwrap();
         let seat = pointer_data.seat();
         match action {
             FrameAction::Close => self.exit = true,
@@ -637,7 +636,7 @@ impl SimpleWindow {
         // Request our next frame
         self.window
             .wl_surface()
-            .frame(qh, self.window.wl_surface().clone());
+            .frame(qh, FrameCallbackData(self.window.wl_surface().clone()));
 
         // Attach and commit to present.
         buffer
@@ -647,17 +646,6 @@ impl SimpleWindow {
     }
 }
 
-delegate_compositor!(SimpleWindow);
-delegate_subcompositor!(SimpleWindow);
-delegate_output!(SimpleWindow);
-delegate_shm!(SimpleWindow);
-
-delegate_seat!(SimpleWindow);
-delegate_pointer!(SimpleWindow);
-
-delegate_xdg_shell!(SimpleWindow);
-delegate_xdg_window!(SimpleWindow);
-
 delegate_registry!(SimpleWindow);
 
 impl ProvidesRegistryState for SimpleWindow {
@@ -666,3 +654,5 @@ impl ProvidesRegistryState for SimpleWindow {
     }
     registry_handlers![OutputState, SeatState,];
 }
+
+smithay_client_toolkit::delegate_dispatch2!(SimpleWindow);
